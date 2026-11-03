@@ -332,6 +332,10 @@ jobs:
           print("dependency metadata clean in wheel and sdist")
           PY
 
+  # Token auth (PYPI_TEST_TOKEN, from Infisical /ci/_shared), as l3io-age-passphrase
+  # does: no trusted publisher is registered on test.pypi.org for this repository.
+  # Registering one and deleting `password:` switches this to OIDC; id-token stays
+  # granted so that needs no other change.
   publish-testpypi:
     name: publish to TestPyPI
     runs-on: ubuntu-latest
@@ -348,6 +352,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
+          password: ${{ secrets.PYPI_TEST_TOKEN }}
 
   publish-pypi:
     name: publish to PyPI

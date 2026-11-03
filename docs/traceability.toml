@@ -68,7 +68,7 @@ reason = "Restore Mode belongs to backup."
 
 [[rule]]
 id = "AD-6"
-source_sha256 = "7e4f34ea373d2af9122db026dfabaa494b3cd1c984f4d3c6f10234f5329209ef"
+source_sha256 = "7299f00dd64617675f69cb67b9e63ccd393fec0906d73d1f8a155d069c4c12d9"
 binds = false
 reason = "Archive format belongs to backup. Re-judged 2026-10-20 after ADR-0014 moved encryption to age through l3io-wp-database: still backup's container, and nothing in it reaches this package."
 
@@ -218,7 +218,7 @@ reason = "Flag-to-Restore-Mode mapping belongs to backup."
 
 [[rule]]
 id = "AD-26"
-source_sha256 = "f6733d1a644ae58562869be80557a1e6170e6ec5ace95d429290159d935b3e0a"
+source_sha256 = "26c8cce888490491377d45b88dd6c3178a4436099dd47259d0ac73062cdb1323"
 binds = false
 reason = "Passphrase resolution belongs to backup. Re-judged 2026-10-20: the handoff to l3io-wp-database's passphrase= and the decided default are backup's and database's."
 
@@ -408,7 +408,7 @@ note = "Every clause has an enforcer here: no literal, hatch-vcs source, no loca
 
 [[rule]]
 id = "ADR-0014"
-source_sha256 = "db6a5a4b79e13711c5f088f9bd91ebab8246ae0d98063e6c16711d95f0504792"
+source_sha256 = "03dab67c1f8d1bb9145ab38ef90daf9d144ffce0e811a3dc894a16a98c12e8b6"
 binds = false
 reason = "Archive encryption, by age through l3io-wp-database. Backup's and database's; this package touches no archive and no key. Re-judged 2026-10-27 after the passphrase amendment (binder package l3io-age-passphrase, age CLI fallback): still not this package's."
 
@@ -426,7 +426,7 @@ reason = "The Run Context binds adapters once, after the Site Lock and the wp-co
 
 [[rule]]
 id = "ADR-0017"
-source_sha256 = "593b18717c682c1fb638e7777f46cf3c1b3dc65bd2f77fca6f638f5ffd078e8b"
+source_sha256 = "92437dd91e67f9ed82ae1803466b5643048c0d5e01e7d6662114fe707509e4e4"
 binds = false
 reason = "Archive Manifest v1 member index. Backup's archive format."
 
@@ -462,6 +462,12 @@ reason = "Restore planned from a probe; the executor runs every phase. Backup's.
 
 [[rule]]
 id = "ADR-0023"
-source_sha256 = "c008dd539392af22217e4ce3326e8ba5cbee00b9c75154e3999ea64acefb4f1a"
+source_sha256 = "92eb6cf240230812ad04cfea04598086d1d8d68048e5c781b07c10dff708f705"
 binds = false
-reason = "Whether a restore replaces the target's wp-config.php. Backup's decision and backup's write path. It applies the target's DB_* values to the Archive's config text with this package's WpConfigString.set, then writes the file itself with the same temp, fsync and replace sequence and owner rule as WpConfigFile; its revisit condition is this package offering a whole-file atomic replace."
+reason = "Whether a restore replaces the target's wp-config.php. Backup's decision and backup's write path. It applies the target's DB_* values to the Archive's config text with this package's WpConfigString.set, then writes the file itself with the same temp, fsync and replace sequence and owner rule as WpConfigFile; its revisit condition is this package offering a whole-file atomic replace. Since 2026-10-29 it requires this package's v0.1.2, which inserts into CRLF content and keeps line endings."
+
+[[rule]]
+id = "ADR-0024"
+source_sha256 = "cb10b4aee5c28a8cb0da92d24fa732cfe6fdc87f300abff9a4d1efebcea6d289"
+binds = false
+reason = "One age-encrypted payload per Archive, passphrase only for v1. Backup's archive format and encryption; this package touches no archive and no key."
