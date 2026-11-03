@@ -15,12 +15,13 @@ current state only.
 family, and the gate on the other two. Work arrives as handoffs, not l3io-pm epics, so the
 state tree is empty by design.
 
-## Current state (2026-10-29)
+## Current state (2026-11-02)
 
-- Last release: **`v0.1.2`** (2026-10-29), the scanner fixes below. Before it, **`v0.1.1`**
+- Last release: **`v0.1.3`** (2026-11-02), the first on TestPyPI (below). Before it,
+  **`v0.1.2`** (2026-10-29), the scanner fixes; before that, **`v0.1.1`**
   (2026-10-20), the write-permission fix; and before that,
   **`v0.1.0`** (2026-10-12, Shawn), on GitHub Releases and the internal Gitea
-  registry, with floating `v0` and `v0.1` now pointing at `v0.1.2`. Nothing is on PyPI. Verified by
+  registry, with floating `v0` and `v0.1` now pointing at `v0.1.3`. Nothing is on PyPI; `v0.1.3` is on TestPyPI. Verified by
   installing from both the release wheel and the Gitea index. Its notes first published
   as "no changes": the builder took the floating `v0.1` as the previous tag. That is
   fixed in `14512f0`, and the release body was rebuilt from `v0.0.2..v0.1.0` using
@@ -74,6 +75,25 @@ file left), and by `make ci` under act: 11 of 11.
   2026-10-20. Separately, this session's shell had no `INFISICAL_API_URL`, so the CLI
   went to `app.infisical.com` and got 403; `INFISICAL_API_URL=https://secops.ravenwolf.org/api`
   fixed it. That is the host's environment, not this repo's.
+
+## 2026-11-02: v0.1.3 on TestPyPI (database's request, Shawn approved)
+
+The repos moved to `LiquidLogicLabs/*`. Database asked for config on TestPyPI so the
+family can install from an index instead of git pins. Released **`v0.1.3`**: the same code as
+0.1.2, with the project URLs Shawn moved to LiquidLogicLabs (`3f9b8ef`). It is the first
+index release, and TestPyPI never lets a version be reused. Auth is by token, as the
+binder's: `PYPI_TEST_TOKEN` was copied from Infisical `/ci/_shared` into the repo secrets
+without passing through the conversation, and `publish-testpypi` passes it (`c2d19b4`).
+Runs: release 41561988484, mirror publish 41562016789, TestPyPI publish 41562142370, all
+green. Listed at https://test.pypi.org/project/l3io-wordpress-config/. A clean install
+from TestPyPI gives 0.1.3 with no dependencies, and PHP confirms the fixes. Database and
+backup were told.
+
+- [todo] Optional: register a trusted publisher on test.pypi.org (owner `LiquidLogicLabs`,
+  workflow `publish.yml`, environment `testpypi`) and delete `password:`. That retires the
+  shared token for this repository.
+- Note: a session's `ListAgents` address changes when it restarts (backup went `-ad` to
+  `-db`); its Happier session id does not. Resolve the address before sending.
 
 ## 2026-10-29: scanner defects found by real configs, fixed in 0.1.2
 
