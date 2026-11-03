@@ -87,7 +87,9 @@ without passing through the conversation, and `publish-testpypi` passes it (`c2d
 Runs: release 41561988484, mirror publish 41562016789, TestPyPI publish 41562142370, all
 green. Listed at https://test.pypi.org/project/l3io-wordpress-config/. A clean install
 from TestPyPI gives 0.1.3 with no dependencies, and PHP confirms the fixes. Database and
-backup were told.
+backup were told. Database followed with `l3io-wordpress-database==0.2.1` on TestPyPI
+(wpconfig floor `>=0.1.2,<0.2`). Verified 2026-11-02: `l3io-wordpress-database[wpconfig]==0.2.1`
+from TestPyPI resolves config 0.1.3, and both import under `l3io.wp` together.
 
 - [todo] Optional: register a trusted publisher on test.pypi.org (owner `LiquidLogicLabs`,
   workflow `publish.yml`, environment `testpypi`) and delete `password:`. That retires the
