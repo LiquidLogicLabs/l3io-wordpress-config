@@ -35,8 +35,8 @@ dependencies = []
 l3io-wordpress-config = "l3io.wp.config.cli.main:main"
 
 [project.urls]
-Homepage = "https://github.com/ravensorb/l3io-wordpress-config"
-Repository = "https://github.com/ravensorb/l3io-wordpress-config"
+Homepage = "https://github.com/LiquidLogicLabs/l3io-wordpress-config"
+Repository = "https://github.com/LiquidLogicLabs/l3io-wordpress-config"
 
 # PEP 735. Not published, so AD-2's zero-dependency promise holds in the
 # distributed metadata and not merely at runtime.

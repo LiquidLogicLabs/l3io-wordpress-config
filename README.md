@@ -144,6 +144,6 @@ the `legacy/*` branches and is not maintained.
 ## Releases
 
 Release notes are built from the commit log at release time and published on the
-[GitHub releases page](https://github.com/ravensorb/l3io-wordpress-config/releases) — there
+[GitHub releases page](https://github.com/LiquidLogicLabs/l3io-wordpress-config/releases) — there
 is no changelog file to keep in sync, and this section deliberately does not
 duplicate one.
