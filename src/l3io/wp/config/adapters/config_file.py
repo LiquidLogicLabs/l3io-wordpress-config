@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import stat
 import tempfile
+from collections.abc import Callable
 from logging import getLogger
 from pathlib import Path
 
@@ -92,6 +93,47 @@ class WpConfigFile:
         """Set the file-scope variable ``key``, verified the same way as a define."""
         return self._set("variable", key, value)
 
+    def replace_content(self, content: str) -> bool:
+        """
+        Replace the whole file with ``content``, through the same verified write as :meth:`set`.
+
+        For laying a complete ``wp-config.php`` over this one, such as a restored
+        site's own config with this site's credentials already set in it. The text is
+        written exactly as given, line endings included. The write keeps the file's
+        mode and owner, refuses rather than change its owner, syncs the file and its
+        directory, and never leaves a partial file. It is read back before it replaces
+        the original, and it is refused if the text defines any key twice: PHP keeps
+        the first and warns, and :meth:`set` could then change the wrong one.
+
+        Returns ``True`` if the file was replaced, ``False`` if it already held this
+        text -- in which case it is not rewritten.
+
+        Raises:
+            ConfigWriteError: ``content`` is not a ``str``, cannot be encoded, or the
+                file cannot be written; the file is unchanged.
+            ReadBackError: The text defines a key twice, or did not read back as
+                written; the file is unchanged.
+        """
+        if not isinstance(content, str):
+            raise ConfigWriteError(
+                filename=str(self._path),
+                reason=f"content must be str, not {type(content).__name__}",
+            )
+        if content == self._config.content:
+            _log.debug("%s already holds this content; not rewriting.", self._path)
+            return False
+        try:
+            actual = self._replace_verified(
+                content, lambda actual: verify_write(before=content, actual=actual, written={})
+            )
+        # ValueError is UnicodeEncodeError, as in _set.
+        except (OSError, ValueError) as exc:
+            raise ConfigWriteError(filename=str(self._path), reason=str(exc)) from exc
+
+        self._config = WpConfigString(actual)
+        _log.debug("%s replaced and verified.", self._path)
+        return True
+
     def _set(self, kind: Kind, key: str, value: ConfigValue) -> bool:
         before = self._config.content
         working = WpConfigString(before)
@@ -102,7 +144,12 @@ class WpConfigFile:
 
         intended = working.content
         try:
-            actual = self._replace_verified(intended, before, {(kind, key): value})
+            actual = self._replace_verified(
+                intended,
+                lambda actual: verify_write(
+                    before=before, actual=actual, written={(kind, key): value}
+                ),
+            )
         # ValueError is UnicodeEncodeError: a str can hold a lone surrogate that
         # no UTF-8 file can.
         except (OSError, ValueError) as exc:
@@ -112,9 +159,7 @@ class WpConfigFile:
         _log.debug("%r written to %s and verified.", key, self._path)
         return True
 
-    def _replace_verified(
-        self, intended: str, before: str, written: dict[tuple[Kind, str], ConfigValue]
-    ) -> str:
+    def _replace_verified(self, intended: str, problems_in: Callable[[str], list[str]]) -> str:
         """
         Write ``intended`` beside the file, verify it, then rename it over the file.
 
@@ -144,7 +189,7 @@ class WpConfigFile:
                 # Read back from the temp file, so a failure never touches the original.
                 handle.seek(0)
                 actual = handle.read()
-            problems = verify_write(before=before, actual=actual, written=written)
+            problems = problems_in(actual)
             if problems:
                 raise ReadBackError(filename=str(self._path), mismatches=problems)
             tmp.replace(self._path)

@@ -71,6 +71,30 @@ kept — a writer that is neither root nor the file's owner — the write raises
 `WpConfigFile` never creates a `wp-config.php`: a file removed since it was read
 raises `ConfigWriteError`.
 
+### Replacing the whole file
+
+`WpConfigFile.replace_content(text)` writes a complete `wp-config.php` through that
+same atomic, verified write: for example, a restored site's own config with this
+site's credentials already set in it. The text lands exactly as given, line endings
+included; mode and owner are kept; and the text is refused with `ReadBackError` if it
+defines any key twice. It returns `False` without rewriting when the file already
+holds that text.
+
+```python
+from l3io.wp.config import WpConfigFile, WpConfigString
+
+archived = WpConfigString(archived_text)        # the config being restored
+target = WpConfigFile("/www/wp-config.php")     # the live one
+archived.set("DB_PASSWORD", new_password)       # change what needs changing
+target.replace_content(archived.content)
+```
+
+**Copying a value from one config into another with `get()` and `set()` is only safe
+for a literal.** `get()` returns an expression as its source text, and `set()` writes a
+`str` as a quoted string, so the official Docker image's
+`define( 'DB_NAME', getenv_docker('WORDPRESS_DB_NAME', 'wordpress') );` copied that
+way becomes a database literally named `getenv_docker('WORDPRESS_DB_NAME', 'wordpress')`.
+
 ## Install
 
 ```shell

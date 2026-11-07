@@ -130,6 +130,19 @@ def test_a_file_with_no_php_newline_raises_and_leaves_the_file_alone(tmp_path):
 # world-readable, on every restore that rewrites it.
 
 
+# Every guarantee below holds for both writers: set(), and replace_content(), which
+# backup uses to lay a whole archived config over the target's. Each writer changes
+# DB_NAME to 'updated'. Parametrising them is what proves the two share one write.
+UPDATED = SOUND.replace("'original'", "'updated'")
+
+
+@pytest.fixture(params=["set", "replace_content"])
+def write(request):
+    if request.param == "set":
+        return lambda config: config.set("DB_NAME", "updated")
+    return lambda config: config.replace_content(UPDATED)
+
+
 @pytest.fixture
 def umask_022():
     previous = os.umask(0o022)
@@ -138,9 +151,9 @@ def umask_022():
 
 
 @pytest.mark.parametrize("mode", [0o600, 0o640, 0o660, 0o400])
-def test_a_write_keeps_the_original_mode(config_file, umask_022, mode):
+def test_a_write_keeps_the_original_mode(config_file, umask_022, mode, write):
     config_file.chmod(mode)
-    assert WpConfigFile(config_file).set("DB_NAME", "updated") is True
+    assert write(WpConfigFile(config_file)) is True
     assert stat.S_IMODE(config_file.stat().st_mode) == mode
 
 
@@ -154,15 +167,15 @@ def _a_group_other_than_the_effective_one() -> int:
     return others[0]
 
 
-def test_a_write_keeps_the_original_group(config_file):
+def test_a_write_keeps_the_original_group(config_file, write):
     """A group-readable file is only useful while it keeps its group (PHP's)."""
     group = _a_group_other_than_the_effective_one()
     os.chown(config_file, -1, group)
-    WpConfigFile(config_file).set("DB_NAME", "updated")
+    write(WpConfigFile(config_file))
     assert config_file.stat().st_gid == group
 
 
-def test_ownership_that_cannot_be_kept_refuses_the_write(config_file, monkeypatch):
+def test_ownership_that_cannot_be_kept_refuses_the_write(config_file, monkeypatch, write):
     """
     Handing the file to the writer could lock PHP out of it, or open it to the
     writer's group. Refuse instead, and leave the original alone.
@@ -175,7 +188,7 @@ def test_ownership_that_cannot_be_kept_refuses_the_write(config_file, monkeypatc
 
     monkeypatch.setattr(os, "fchown", refuse)
     with pytest.raises(ConfigWriteError) as caught:
-        WpConfigFile(config_file).set("DB_NAME", "updated")
+        write(WpConfigFile(config_file))
 
     assert "owner" in caught.value.reason
     assert config_file.read_text() == SOUND
@@ -183,7 +196,7 @@ def test_ownership_that_cannot_be_kept_refuses_the_write(config_file, monkeypatc
     assert list(config_file.parent.iterdir()) == [config_file]
 
 
-def test_a_planted_temp_name_is_never_written_through(config_file):
+def test_a_planted_temp_name_is_never_written_through(config_file, write):
     """
     v0.1.0 used the fixed name ``wp-config.php.l3io-tmp``: a symlink planted there
     redirected the write, then was renamed over wp-config.php itself.
@@ -193,7 +206,7 @@ def test_a_planted_temp_name_is_never_written_through(config_file):
     decoy = config_file.with_name(f"{config_file.name}.l3io-tmp")
     decoy.symlink_to(victim)
 
-    WpConfigFile(config_file).set("DB_NAME", "updated")
+    write(WpConfigFile(config_file))
 
     assert victim.read_text() == "untouched"
     assert not config_file.is_symlink()
@@ -201,7 +214,7 @@ def test_a_planted_temp_name_is_never_written_through(config_file):
     assert decoy.is_symlink(), "a file the package did not create is not its to remove"
 
 
-def test_the_write_is_flushed_to_disk_before_and_after_the_rename(config_file, monkeypatch):
+def test_the_write_is_flushed_to_disk_before_and_after_the_rename(config_file, monkeypatch, write):
     """
     Without fsync a crash after the rename can leave an empty or stale file, so the
     temp file must be synced before it replaces the original, and the directory after.
@@ -214,11 +227,11 @@ def test_the_write_is_flushed_to_disk_before_and_after_the_rename(config_file, m
         real_fsync(fd)
 
     monkeypatch.setattr(os, "fsync", spy)
-    WpConfigFile(config_file).set("DB_NAME", "updated")
+    write(WpConfigFile(config_file))
     assert synced == [stat.S_IFREG, stat.S_IFDIR]
 
 
-def test_a_file_removed_after_reading_is_not_recreated(config_file):
+def test_a_file_removed_after_reading_is_not_recreated(config_file, write):
     """
     The package never creates a wp-config.php: with no original there is no mode or
     owner to keep, and guessing one for a credentials file is the defect itself.
@@ -227,13 +240,13 @@ def test_a_file_removed_after_reading_is_not_recreated(config_file):
     config_file.unlink()
 
     with pytest.raises(ConfigWriteError):
-        config.set("DB_NAME", "updated")
+        write(config)
 
     assert list(config_file.parent.iterdir()) == []
 
 
 def test_a_directory_that_cannot_be_synced_still_reports_the_write(
-    config_file, monkeypatch, caplog
+    config_file, monkeypatch, caplog, write
 ):
     """The rename has happened; raising would report a changed file as unchanged."""
     real_fsync = os.fsync
@@ -244,7 +257,7 @@ def test_a_directory_that_cannot_be_synced_still_reports_the_write(
         real_fsync(fd)
 
     monkeypatch.setattr(os, "fsync", refuse_directories)
-    assert WpConfigFile(config_file).set("DB_NAME", "updated") is True
+    assert write(WpConfigFile(config_file)) is True
     assert WpConfigFile(config_file).get("DB_NAME") == "updated"
     assert "could not sync its directory" in caplog.text
 
@@ -276,3 +289,52 @@ def test_content_is_reported_as_it_is_on_disk(tmp_path):
     path = tmp_path / "wp-config.php"
     path.write_bytes(b"<?php\r\ndefine( 'DB_NAME', 'a' );\r\n")
     assert WpConfigFile(path).content == "<?php\r\ndefine( 'DB_NAME', 'a' );\r\n"
+
+
+# --- replace_content: the whole file, through the same verified write ------------
+#
+# Backup's --overwrite-wp-config lays the archived config over the target's, with the
+# target's DB_* values set in memory first (its ADR-0023). Until v0.1.4 it had to
+# copy this package's temp-fsync-replace write to do that; now it calls this one.
+
+
+def test_replace_content_writes_exactly_the_text_given(tmp_path):
+    path = tmp_path / "wp-config.php"
+    path.write_bytes(b"<?php\r\ndefine( 'DB_NAME', 'a' );\r\n")
+    new = "<?php\r\ndefine( 'DB_NAME', 'b' );\r\ndefine( 'WP_CACHE', true );\r\n"
+    config = WpConfigFile(path)
+    assert config.replace_content(new) is True
+    assert path.read_bytes() == new.encode(), "byte for byte, CRLF included"
+    assert config.content == new
+    assert config.get("WP_CACHE") is True
+
+
+def test_replace_content_with_the_same_text_does_not_rewrite(config_file):
+    before = config_file.stat().st_mtime_ns
+    assert WpConfigFile(config_file).replace_content(SOUND) is False
+    assert config_file.stat().st_mtime_ns == before
+
+
+def test_replace_content_refuses_text_with_a_duplicate_definition(config_file):
+    """PHP keeps the first and warns; the scanner would read one and write the other."""
+    doubled = SOUND + "define('DB_NAME', 'again');\n"
+    with pytest.raises(ReadBackError) as caught:
+        WpConfigFile(config_file).replace_content(doubled)
+    assert any("2 times" in problem for problem in caught.value.mismatches)
+    assert config_file.read_text() == SOUND
+    assert list(config_file.parent.iterdir()) == [config_file]
+
+
+@pytest.mark.parametrize("bad", [b"<?php\n", None, 42], ids=["bytes", "none", "int"])
+def test_replace_content_refuses_what_is_not_text(config_file, bad):
+    """AD-14: a TypeError from deep inside must not cross the public boundary."""
+    with pytest.raises(ConfigWriteError):
+        WpConfigFile(config_file).replace_content(bad)
+    assert config_file.read_text() == SOUND
+
+
+def test_replace_content_refuses_text_no_file_can_hold(config_file):
+    with pytest.raises(ConfigWriteError):
+        WpConfigFile(config_file).replace_content("<?php\ndefine('X', '\udcff');\n")
+    assert config_file.read_text() == SOUND
+    assert list(config_file.parent.iterdir()) == [config_file]

@@ -136,4 +136,4 @@ addopts = "--cov=l3io.wp.config --cov-report=term-missing"
 # deleted test file fails CI instead of passing quietly. pytest-cov applies it
 # to every run that measures coverage — a subset run must pass --no-cov.
 [tool.coverage.report]
-fail_under = 95.5
+fail_under = 95.8
