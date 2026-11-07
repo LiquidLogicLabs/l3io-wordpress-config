@@ -15,13 +15,14 @@ current state only.
 family, and the gate on the other two. Work arrives as handoffs, not l3io-pm epics, so the
 state tree is empty by design.
 
-## Current state (2026-11-02)
+## Current state (2026-11-07)
 
-- Last release: **`v0.1.3`** (2026-11-02), the first on TestPyPI (below). Before it,
+- Last release: **`v0.1.4`** (2026-11-07), `replace_content()` (below). Before it,
+  **`v0.1.3`** (2026-11-02), the first on TestPyPI; before that,
   **`v0.1.2`** (2026-10-29), the scanner fixes; before that, **`v0.1.1`**
   (2026-10-20), the write-permission fix; and before that,
   **`v0.1.0`** (2026-10-12, Shawn), on GitHub Releases and the internal Gitea
-  registry, with floating `v0` and `v0.1` now pointing at `v0.1.3`. Nothing is on PyPI; `v0.1.3` is on TestPyPI. Verified by
+  registry, with floating `v0` and `v0.1` now pointing at `v0.1.4`. Nothing is on PyPI; `v0.1.3` and `v0.1.4` are on TestPyPI. Verified by
   installing from both the release wheel and the Gitea index. Its notes first published
   as "no changes": the builder took the floating `v0.1` as the previous tag. That is
   fixed in `14512f0`, and the release body was rebuilt from `v0.0.2..v0.1.0` using
@@ -75,6 +76,27 @@ file left), and by `make ci` under act: 11 of 11.
   2026-10-20. Separately, this session's shell had no `INFISICAL_API_URL`, so the CLI
   went to `app.infisical.com` and got 403; `INFISICAL_API_URL=https://secops.ravenwolf.org/api`
   fixed it. That is the host's environment, not this repo's.
+
+## 2026-11-07: v0.1.4, `WpConfigFile.replace_content()` (backup's BL-E002-091)
+
+Backup's `--overwrite-wp-config` (its ADR-0023) copied this package's atomic write.
+`replace_content(text)` exposes that write publicly (`925e2ee`). The write-safety tests
+are parametrized over both writers, and all 17 replace cases failed before the method
+existed. 338 tests, coverage 95.95%, floor 95.8. Released at Shawn's approval: release
+run 42425941937, mirror publish 42425957213, TestPyPI publish 42426050335, all green.
+Verified from a root container (owner and mode kept) and from the TestPyPI install.
+Backup was told, and was told it can delete `config_writer.py::_write_over`.
+
+- [blocked] Shawn: **a verbatim-copy API.** `get()` returns an expression as its source
+  text, as a `str` indistinguishable from a quoted literal, and `set()` writes a `str` as a
+  quoted string. So copying a value between configs is only safe for literals. On the
+  Docker image's config, backup's keep-the-target's-`DB_*` step would name the database
+  `getenv_docker('WORDPRESS_DB_NAME', 'wordpress')`, which PHP confirmed. The README warns;
+  backup was told. The fix would be an API that copies a define's source verbatim.
+- Backup's governing documents keep moving (14 rules on 2026-11-07 alone).
+  Re-judge on every session start; `/tmp/wpc-retrace/recover.py` is gone after a reboot,
+  so recreate it from the approach in `tests/test_traceability.py`: find the backup
+  commit whose rule text matches the stored hash, then diff.
 
 ## 2026-11-02: v0.1.3 on TestPyPI (database's request, Shawn approved)
 
