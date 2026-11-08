@@ -15,14 +15,15 @@ current state only.
 family, and the gate on the other two. Work arrives as handoffs, not l3io-pm epics, so the
 state tree is empty by design.
 
-## Current state (2026-11-07)
+## Current state (2026-11-08)
 
-- Last release: **`v0.1.4`** (2026-11-07), `replace_content()` (below). Before it,
+- Last release: **`v0.1.5`** (2026-11-08), `get_value()` (below). Before it,
+  **`v0.1.4`** (2026-11-07), `replace_content()`; before that,
   **`v0.1.3`** (2026-11-02), the first on TestPyPI; before that,
   **`v0.1.2`** (2026-10-29), the scanner fixes; before that, **`v0.1.1`**
   (2026-10-20), the write-permission fix; and before that,
   **`v0.1.0`** (2026-10-12, Shawn), on GitHub Releases and the internal Gitea
-  registry, with floating `v0` and `v0.1` now pointing at `v0.1.4`. Nothing is on PyPI; `v0.1.3` and `v0.1.4` are on TestPyPI. Verified by
+  registry, with floating `v0` and `v0.1` now pointing at `v0.1.5`. Nothing is on PyPI; `v0.1.3` to `v0.1.5` are on TestPyPI. Verified by
   installing from both the release wheel and the Gitea index. Its notes first published
   as "no changes": the builder took the floating `v0.1` as the previous tag. That is
   fixed in `14512f0`, and the release body was rebuilt from `v0.0.2..v0.1.0` using
@@ -77,6 +78,32 @@ file left), and by `make ci` under act: 11 of 11.
   went to `app.infisical.com` and got 403; `INFISICAL_API_URL=https://secops.ravenwolf.org/api`
   fixed it. That is the host's environment, not this repo's.
 
+## 2026-11-08: v0.1.5, `get_value()` and `EnvLookup` (backup's pre-release request)
+
+Backup could not back up the official Docker image's sites. `get('DB_HOST')` returned
+`getenv_docker('WORDPRESS_DB_HOST', 'mysql')` as a plain `str`, and backup used that as
+the host. Shawn decided it is needed before backup's first release. Built in `d5d4bd5`:
+- `get_value()` / `get_variable_value()` return a literal, `EnvLookup`, `Expression` or
+  `MISSING`;
+- `EnvLookup.resolve(environ, read_file)` follows PHP's semantics, including
+  `getenv_docker`'s `NAME_FILE`;
+- `get_source()` / `get_variable_source()` return a value verbatim;
+- `ConfigLookupError` is new.
+
+PHP grades all of it with real environment variables and secret files (`php_read` now
+takes `env=` and `files=`). 415 tests, 96.69%, floor 96.5. Released 0.1.5: release run
+42529922872, mirror publish 42529942580, TestPyPI publish 42530025129. Verified from the
+TestPyPI install. Backup was told the API names via Happier.
+
+- The deferred verbatim-copy item is closed by `get_source()`. Backup's BL-E008-032 can
+  use it.
+- ADR-0023 now binds: backup delegates its whole-file write to `replace_content`.
+- Known, unchanged: `get()` still reads `017` as 17 (PHP: octal 15) and returns
+  double-quoted strings with their quotes. `get_value()` is correct for both: an
+  `Expression` and a `str` respectively.
+- TestPyPI's JSON API lists a release several minutes before its `/simple/` index
+  serves it. An install right after upload fails with "no version"; wait for `/simple/`.
+
 ## 2026-11-07: v0.1.4, `WpConfigFile.replace_content()` (backup's BL-E002-091)
 
 Backup's `--overwrite-wp-config` (its ADR-0023) copied this package's atomic write.
@@ -89,7 +116,7 @@ Backup was told, and was told it can delete `config_writer.py::_write_over`.
 
 - Backup adopted 0.1.4 in its `63a4c71`: it pins `>=0.1.4,<0.2`, `replace_content()`
   replaced its `_write_over`, and BL-E002-091 is resolved.
-- [deferred, post-v1] **A verbatim-copy API.** Shawn's call (relayed by backup on
+- [done in 0.1.5, `get_source()`] **A verbatim-copy API.** Shawn's call (relayed by backup on
   2026-11-07): document the gap now and fix it after v1, as backup's BL-E008-032. Backup's
   docs warn that `DB_*` values that are expressions need the default keep path. The
   request will come through Shawn after release; don't build it before then. `get()` returns an expression as its source
