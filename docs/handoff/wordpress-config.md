@@ -87,12 +87,16 @@ run 42425941937, mirror publish 42425957213, TestPyPI publish 42426050335, all g
 Verified from a root container (owner and mode kept) and from the TestPyPI install.
 Backup was told, and was told it can delete `config_writer.py::_write_over`.
 
-- [blocked] Shawn: **a verbatim-copy API.** `get()` returns an expression as its source
+- Backup adopted 0.1.4 in its `63a4c71`: it pins `>=0.1.4,<0.2`, `replace_content()`
+  replaced its `_write_over`, and BL-E002-091 is resolved.
+- [deferred, post-v1] **A verbatim-copy API.** Shawn's call (relayed by backup on
+  2026-11-07): document the gap now and fix it after v1, as backup's BL-E008-032. Backup's
+  docs warn that `DB_*` values that are expressions need the default keep path. The
+  request will come through Shawn after release; don't build it before then. `get()` returns an expression as its source
   text, as a `str` indistinguishable from a quoted literal, and `set()` writes a `str` as a
   quoted string. So copying a value between configs is only safe for literals. On the
-  Docker image's config, backup's keep-the-target's-`DB_*` step would name the database
-  `getenv_docker('WORDPRESS_DB_NAME', 'wordpress')`, which PHP confirmed. The README warns;
-  backup was told. The fix would be an API that copies a define's source verbatim.
+  Docker image's config, backup's overwrite path would name the database
+  `getenv_docker('WORDPRESS_DB_NAME', 'wordpress')`, which PHP confirmed. The README warns.
 - Backup's governing documents keep moving (14 rules on 2026-11-07 alone).
   Re-judge on every session start; `/tmp/wpc-retrace/recover.py` is gone after a reboot,
   so recreate it from the approach in `tests/test_traceability.py`: find the backup
