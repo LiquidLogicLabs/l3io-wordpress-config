@@ -84,7 +84,10 @@ stop.
   `publish.yml`, which are GitHub-only (OIDC/tokens, workflow-made tags, upload-artifact
   v7). It records the commit it passed for. **Release only through `make release`**,
   which refuses without that record, or when GitHub has no runs, or any run not
-  `success`, for HEAD. Dispatching `release.yml` by hand bypasses both checks.
+  `success`, for HEAD. `release.yml` repeats the GitHub check as its first step (the
+  latest `CI` and `Security audit` runs for the dispatched commit must have succeeded),
+  so a hand dispatch cannot release a red commit. It can still skip the local
+  preflight, which nothing on GitHub can see.
 - `make check` runs lint, types, contracts and tests — everything CI's static,
   contracts and test jobs run. `make ci` replays the whole pipeline locally under
   nektos/act; `make ci-job JOB=<id>` replays one.

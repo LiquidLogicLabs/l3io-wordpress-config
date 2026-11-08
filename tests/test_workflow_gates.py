@@ -245,3 +245,43 @@ def test_release_notes_never_start_from_a_floating_tag() -> None:
     assert previous is not None, "no step with id 'previous' computes the lower bound"
     assert "--match 'v[0-9]*.[0-9]*.[0-9]*'" in str(previous.get("run", ""))
     assert steps.index(previous) < steps.index(builder)
+
+
+# ---- release.yml refuses a commit whose CI is not green (family rule, 2026-11-08) ----
+
+CI_GATE = "CI must be green on the commit being released"
+
+
+def _gate() -> tuple[int, dict[str, Any]]:
+    steps = _release_steps()
+    found = [(i, s) for i, s in enumerate(steps) if s.get("name") == CI_GATE]
+    assert len(found) == 1, f"release.yml needs exactly one step named {CI_GATE!r}"
+    return found[0]
+
+
+def test_the_ci_gate_runs_before_anything_is_tagged_or_dispatched() -> None:
+    """`make release` checks too, but a hand dispatch of release.yml skips make."""
+    steps = _release_steps()
+    gate, step = _gate()
+    acts = [
+        i
+        for i, s in enumerate(steps)
+        if str(s.get("uses", "")).startswith(
+            (
+                "LiquidLogicLabs/git-action-tag-create-update",
+                "LiquidLogicLabs/git-action-tag-floating-version",
+                "LiquidLogicLabs/git-action-trigger-workflow",
+            )
+        )
+    ]
+    assert acts, "release.yml tags or dispatches nothing -- the check is vacuous"
+    assert gate < min(acts)
+    assert "if" not in step, "a dev publish is a publish too: the gate applies to every bump"
+
+
+def test_the_ci_gate_checks_the_released_commit_and_both_workflows() -> None:
+    _, step = _gate()
+    script = str(step.get("run", ""))
+    assert "GITHUB_SHA" in script, "the commit tagged is the one dispatched"
+    for workflow in ("CI", "Security audit"):
+        assert f'"{workflow}"' in script, f"the gate must require {workflow}"

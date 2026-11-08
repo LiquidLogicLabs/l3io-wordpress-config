@@ -43,6 +43,40 @@ jobs:
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
 
+      # Family rule (Shawn, 2026-11-08): never release or publish while CI is red.
+      # `make release` checks before dispatching, but dispatching this workflow by
+      # hand skips make, so the check lives here too. It requires the latest CI and
+      # Security audit runs for the dispatched commit -- the one tagged below -- to
+      # have succeeded, waiting for one still running. Config's release pushes no
+      # commit of its own, so unlike l3io-age-passphrase it never dispatches CI: a
+      # commit with no green CI is refused, not tested here.
+      - name: CI must be green on the commit being released
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          for workflow in "CI" "Security audit"; do
+            latest() {
+              gh run list --commit "$GITHUB_SHA" --workflow "$workflow" --limit 1 \
+                --json databaseId,status,conclusion --jq '.[0] // empty'
+            }
+            run=$(latest)
+            if [ -z "$run" ]; then
+              echo "::error::no ${workflow} run for ${GITHUB_SHA}; push it and let CI pass first"
+              exit 1
+            fi
+            if [ "$(jq -r .status <<<"$run")" != "completed" ]; then
+              echo "${workflow} still running for ${GITHUB_SHA}; waiting"
+              gh run watch "$(jq -r .databaseId <<<"$run")" >/dev/null || true
+              run=$(latest)
+            fi
+            if [ "$(jq -r .conclusion <<<"$run")" != "success" ]; then
+              echo "::error::${workflow} is $(jq -r '.status + "/" + .conclusion' <<<"$run") for ${GITHUB_SHA}; not releasing"
+              exit 1
+            fi
+            echo "${workflow}: success for ${GITHUB_SHA}"
+          done
+
       # A dev build needs no version decision at all: the commit's distance from
       # the last tag already determines it. Hand straight over to publish.yml,
       # which is the only thing that publishes.
