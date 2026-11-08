@@ -77,6 +77,14 @@ stop.
   GitHub, `security-audit.yml` runs it on push, PR, weekly and on dispatch, because
   advisories arrive without commits. With no runtime dependencies, what it guards is the
   dev toolchain; a planted dev-only vulnerable pin fails it, so it is not vacuous.
+- **Family rule (Shawn, 2026-11-08): nothing is released, tagged or published until CI
+  is fully green on GitHub, and `make preflight` has passed locally for that commit.**
+  `make preflight` runs `make check`, then everything act can run: `ci.yml` (all 11 jobs,
+  every Python, unnarrowed) and `security-audit.yml`. It also dry-runs `release.yml` and
+  `publish.yml`, which are GitHub-only (OIDC/tokens, workflow-made tags, upload-artifact
+  v7). It records the commit it passed for. **Release only through `make release`**,
+  which refuses without that record, or when GitHub has no runs, or any run not
+  `success`, for HEAD. Dispatching `release.yml` by hand bypasses both checks.
 - `make check` runs lint, types, contracts and tests — everything CI's static,
   contracts and test jobs run. `make ci` replays the whole pipeline locally under
   nektos/act; `make ci-job JOB=<id>` replays one.

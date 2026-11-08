@@ -48,7 +48,7 @@ INFISICAL_PATH ?= /ci/act/l3io-wordpress-config
 ACT_RUNNER ?= $(INFISICAL) run --projectId $(INFISICAL_PROJECT) --env $(INFISICAL_ENV) --path $(INFISICAL_PATH) --
 ACT ?= act
 
-.PHONY: help act-init lint format types test contracts namespace-check check audit ci ci-job ci-dryrun ci-dryrun-one ci-list build verify-wheel clean
+.PHONY: help act-init lint format types test contracts namespace-check check audit ci ci-audit preflight ci-job ci-dryrun ci-dryrun-one ci-list build verify-wheel clean
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -107,6 +107,32 @@ verify-wheel: ## Build a wheel, install it into a clean environment and import i
 
 ci: act-init ## Replay the full CI pipeline locally
 	$(ACT_RUNNER) $(ACT) push
+
+ci-audit: act-init ## Replay security-audit.yml under act (make ci runs only ci.yml)
+	$(ACT_RUNNER) $(ACT) push -W .github/workflows/security-audit.yml
+
+# The family rule (Shawn, 2026-11-08): before any release, tag or publish, run every
+# job act can run, across the full matrix, and name what it cannot. Here:
+#   act runs     ci.yml (all 11 jobs, py3.11-3.14, unnarrowed) and security-audit.yml;
+#   GitHub-only  release.yml and publish.yml. They need OIDC or index tokens, tags
+#                made by GITHUB_TOKEN, and upload-artifact v7, which act's artifact
+#                server does not speak. `ci-dryrun` resolves every job and action ref
+#                in them, and their clean-install jobs run on GitHub at publish.
+# A pass is recorded against the commit, and `make release` refuses without it.
+PREFLIGHT_STAMP = $(shell git rev-parse --git-path l3io-preflight)
+
+preflight: ## Everything act can run, for this commit; required by make release
+	@set -eu; \
+	if [ -n "$$(git status --porcelain --untracked-files=no)" ]; then \
+	  echo "tracked files are modified: preflight would not be testing the commit"; exit 1; \
+	fi; \
+	rm -f "$(PREFLIGHT_STAMP)"; \
+	$(MAKE) --no-print-directory check; \
+	$(MAKE) --no-print-directory ci; \
+	$(MAKE) --no-print-directory ci-audit; \
+	$(MAKE) --no-print-directory ci-dryrun; \
+	git rev-parse HEAD > "$(PREFLIGHT_STAMP)"; \
+	echo "preflight passed for $$(git rev-parse --short HEAD). GitHub-only: release.yml, publish.yml (dry-run resolved)."
 
 ci-job: act-init ## Replay one job: make ci-job JOB=contracts
 	@test -n "$(JOB)" || { echo "usage: make ci-job JOB=<job-id>"; exit 2; }
@@ -236,6 +262,16 @@ release: ## Cut a release: make release patch|minor|major|dev
 	  echo "so push or pull first. Local: $$(git rev-parse --short HEAD)  origin: $$(git rev-parse --short origin/$(RELEASE_BRANCH))"; \
 	  exit 1; \
 	fi; \
+	sha=$$(git rev-parse HEAD); \
+	if [ "$$(cat "$(PREFLIGHT_STAMP)" 2>/dev/null)" != "$$sha" ]; then \
+	  echo "no local preflight for $$(git rev-parse --short HEAD): run 'make preflight' first"; exit 1; \
+	fi; \
+	runs=$$($(GH) run list --commit "$$sha" --json name,status,conclusion); \
+	if [ "$$(echo "$$runs" | jq length)" -eq 0 ]; then \
+	  echo "GitHub has no runs for $$sha yet -- CI must have run and passed"; exit 1; \
+	fi; \
+	red=$$(echo "$$runs" | jq -r '.[] | select(.status != "completed" or .conclusion != "success") | "\(.name): \(.status)/\(.conclusion)"'); \
+	if [ -n "$$red" ]; then echo "CI on GitHub is not green for this commit:"; echo "$$red"; exit 1; fi; \
 	latest=$$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1); \
 	echo "  repo         $$($(GH) repo view --json nameWithOwner -q .nameWithOwner)"; \
 	echo "  commit       $$(git rev-parse --short HEAD)"; \
