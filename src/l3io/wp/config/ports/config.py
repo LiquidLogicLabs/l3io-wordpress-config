@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from l3io.wp.config.domain.values import ConfigValue, MissingType
+from l3io.wp.config.domain.values import ConfigValue, EnvLookup, Expression, MissingType
 
 __all__ = ["WpConfigSource"]
 
@@ -22,6 +22,16 @@ class WpConfigSource(Protocol):
     def content(self) -> str: ...
 
     def get(self, key: str) -> ConfigValue | MissingType: ...
+
+    def get_value(self, key: str) -> ConfigValue | EnvLookup | Expression | MissingType: ...
+
+    def get_variable_value(
+        self, key: str
+    ) -> ConfigValue | EnvLookup | Expression | MissingType: ...
+
+    def get_source(self, key: str) -> str | MissingType: ...
+
+    def get_variable_source(self, key: str) -> str | MissingType: ...
 
     def set(self, key: str, value: ConfigValue) -> bool: ...
 

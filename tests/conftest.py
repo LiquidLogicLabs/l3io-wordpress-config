@@ -16,6 +16,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import tarfile
@@ -56,11 +57,15 @@ echo json_encode([
 _LOOP = (
     "mkdir /w && cd /w && tar -x && for d in */; do "
     'printf "%s\\t" "${d%/}"; '
-    'php -d display_errors=stdout -d error_reporting=-1 _dump.php "/w/${d}wp-config.php"'
+    # Each case's environment, if it has one, in a subshell so it ends with the case.
+    '( [ -f "${d}.env" ] && . "./${d}.env"; '
+    'php -d display_errors=stdout -d error_reporting=-1 _dump.php "/w/${d}wp-config.php" )'
     " | tr -d '\\n'; echo; done"
 )
 
-PhpRead = Callable[[dict[str, bytes]], dict[str, dict[str, Any]]]
+#: ``php_read(cases, env=None, files=None)``. ``env`` gives a case its environment;
+#: ``files`` adds files beside its config, at ``/w/<case>/<name>`` in the container.
+PhpRead = Callable[..., dict[str, dict[str, Any]]]
 
 
 def _docker_works() -> bool:
@@ -78,7 +83,11 @@ def _docker_works() -> bool:
     return probe.returncode == 0
 
 
-def _archive(cases: dict[str, bytes]) -> bytes:
+def _archive(
+    cases: dict[str, bytes],
+    env: dict[str, dict[str, str]] | None = None,
+    files: dict[str, dict[str, bytes]] | None = None,
+) -> bytes:
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w") as tar:
 
@@ -91,6 +100,14 @@ def _archive(cases: dict[str, bytes]) -> bytes:
         for case, content in cases.items():
             add(f"{case}/wp-config.php", content)
             add(f"{case}/wp-settings.php", b"<?php\n")
+            exports = "".join(
+                f"export {name}={shlex.quote(value)}\n"
+                for name, value in (env or {}).get(case, {}).items()
+            )
+            if exports:
+                add(f"{case}/.env", exports.encode())
+            for name, data in (files or {}).get(case, {}).items():
+                add(f"{case}/{name}", data)
     return buffer.getvalue()
 
 
@@ -102,14 +119,18 @@ def php_read() -> PhpRead:
             pytest.fail("L3IO_REQUIRE_PHP_ORACLE=1, but docker is not usable here")
         pytest.skip("the PHP oracle needs docker")
 
-    def read(cases: dict[str, bytes]) -> dict[str, dict[str, Any]]:
+    def read(
+        cases: dict[str, bytes],
+        env: dict[str, dict[str, str]] | None = None,
+        files: dict[str, dict[str, bytes]] | None = None,
+    ) -> dict[str, dict[str, Any]]:
         bad = [name for name in cases if not name or "/" in name or name.startswith(".")]
         if bad:
             msg = f"case names must be plain directory names: {bad}"
             raise ValueError(msg)
         done = subprocess.run(  # noqa: S603 - fixed argv; the configs arrive on stdin
             ["docker", "run", "--rm", "-i", "--network", "none", PHP_IMAGE, "sh", "-c", _LOOP],  # noqa: S607
-            input=_archive(cases),
+            input=_archive(cases, env, files),
             capture_output=True,
             timeout=600,
             check=False,

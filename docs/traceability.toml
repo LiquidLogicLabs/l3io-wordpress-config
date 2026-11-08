@@ -68,7 +68,7 @@ reason = "Restore Mode belongs to backup."
 
 [[rule]]
 id = "AD-6"
-source_sha256 = "d52ffa6c5623f52bca85700e23b1de9e7d91408896638f5d1d519fdd61021119"
+source_sha256 = "81164a686ffc348a4c92f1ab9406de031eacc7af1332d1edf6f7294c45b62bca"
 binds = false
 reason = "Archive format belongs to backup. Re-judged 2026-10-20 after ADR-0014 moved encryption to age through l3io-wp-database: still backup's container, and nothing in it reaches this package."
 
@@ -203,7 +203,7 @@ reason = "Freezes wpbackup2's CLI as shipped at v0.2.21, and names no other CLI.
 
 [[rule]]
 id = "AD-23"
-source_sha256 = "177fc59dd1dc90a9caf8a3ed60535d9d5a7df40afc4140a329fd1dae9b118333"
+source_sha256 = "e3717f9b0281a1b23b281c683fe1f5f42de264350ec4099d2e24ea54b3719613"
 binds = false
 reason = "Archive format detection belongs to backup. Re-judged 2026-10-20: the amendment (files-only v0 Archives) is backup's alone."
 
@@ -361,12 +361,17 @@ enforced_by = [
     "tests/test_php_oracle.py::test_the_expectations_are_what_php_reads",
     "tests/test_php_oracle.py::test_php_reads_every_rewrite_where_the_package_wrote_it",
     "tests/test_php_oracle.py::test_random_writes_land_as_php_reads_them",
+    "tests/test_typed_values.py::test_anything_else_is_an_expression_with_its_source",
+    "tests/test_real_configs.py::test_get_value_never_mistakes_an_expression_for_a_literal",
+    "tests/test_php_oracle.py::test_every_literal_reading_is_phps",
+    "tests/test_php_oracle.py::test_env_lookups_resolve_as_php_resolves_them",
+    "tests/test_php_oracle.py::test_the_docker_image_resolves_as_php_resolves_it",
 ]
 not_checkable = "The 'Revisit when' conditions are events in the world, not properties of this code. The ADR now records that condition (a) was met on 2026-10-12 and fixed within Option C, and that (b) is not met."
 
 [[rule]]
 id = "ADR-0011"
-source_sha256 = "878f92cd37b5379a3734b6a9b8fbdb4722ee296d392ffa0cf512edfe2fea37ad"
+source_sha256 = "70cc205f8ec8642d443726573999b3a386e6bcbf21411b0c23720fe3b76d349d"
 binds = false
 reason = "Its structlog and opentelemetry-api decisions reach this package only through AD-10 (which carves it out) and AD-24 (see that row). Nothing in it binds a zero-dependency package directly."
 
@@ -441,7 +446,7 @@ reason = "Redaction at backup's CLI and logging boundary. This package's own err
 
 [[rule]]
 id = "ADR-0019"
-source_sha256 = "82aa11c343ec8756e119d613438b76b52d8a4a9f982bcf68aecc072707be6bc8"
+source_sha256 = "8109388ead4582b1484e0d8c6f0b4bf58f999263a9a5410674bb1d63c362c9d5"
 binds = false
 reason = "Scope of backup's Dry Run. Backup's."
 
@@ -459,19 +464,27 @@ reason = "Run Journal location and lifecycle. Backup's."
 
 [[rule]]
 id = "ADR-0022"
-source_sha256 = "22c80457058a60183b5a2c1291fe1f6fce7a4a48aa777917a08fe754b74d9a31"
+source_sha256 = "2624514dd792c03468a2d63ba73d6fa525a03ca4b965428342edf74113875d21"
 binds = false
 reason = "Restore planned from a probe; the executor runs every phase. Backup's."
 
 [[rule]]
 id = "ADR-0023"
-source_sha256 = "300cc536bcc1af3dac9fa76905cb9ec0824d9776a5f7e61f6a0e606adfa0732d"
-binds = false
-reason = "Whether a restore replaces the target's wp-config.php. Backup's decision and backup's write path. It applies the target's DB_* values to the Archive's config text with this package's WpConfigString.set, then writes the file itself with the same temp, fsync and replace sequence and owner rule as WpConfigFile; its revisit condition is this package offering a whole-file atomic replace, which v0.1.4's WpConfigFile.replace_content now does. Since 2026-10-29 it requires this package's v0.1.2, which inserts into CRLF content and keeps line endings."
-
+source_sha256 = "72a937f6f2edd8d209fef13c31608c7410dd64128675faf984af45e7bae8498b"
+binds = true
+enforced_by = [
+    "tests/test_file_adapter.py::test_replace_content_writes_exactly_the_text_given",
+    "tests/test_file_adapter.py::test_replace_content_with_the_same_text_does_not_rewrite",
+    "tests/test_file_adapter.py::test_replace_content_refuses_text_with_a_duplicate_definition",
+    "tests/test_file_adapter.py::test_replace_content_refuses_what_is_not_text",
+    "tests/test_file_adapter.py::test_a_write_keeps_the_original_mode",
+    "tests/test_file_adapter.py::test_ownership_that_cannot_be_kept_refuses_the_write",
+    "tests/test_file_adapter.py::test_a_file_removed_after_reading_is_not_recreated",
+]
+note = "Binding since backup's 2026-11-07 amendment: backup writes no byte of a live wp-config.php itself and delegates the whole-file replace to WpConfigFile.replace_content (v0.1.4), relying on its mode and owner rule, read-back, duplicate-key refusal and unchanged-text False. The write-safety tests run against both set() and replace_content(). Which config a restore keeps, and its DB_* keep step, stay backup's."
 [[rule]]
 id = "ADR-0024"
-source_sha256 = "242e0994e2b78e276bfd066f38a401d38009f33c29ea060376d067683b6d4ee8"
+source_sha256 = "1bd7b0c03c353cb3c2a85efdc993f1536093338076ea7aa870e034a0233af7f5"
 binds = false
 reason = "One age-encrypted payload per Archive, passphrase only for v1. Backup's archive format and encryption; this package touches no archive and no key."
 

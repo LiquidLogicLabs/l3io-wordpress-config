@@ -11,22 +11,32 @@ from l3io.wp.config.adapters.config_file import WpConfigFile
 from l3io.wp.config.core.config_string import WpConfigString
 from l3io.wp.config.domain.errors import (
     ConfigKeyError,
+    ConfigLookupError,
     ConfigReadError,
     ConfigValueError,
     ConfigWriteError,
     ReadBackError,
     WpConfigError,
 )
-from l3io.wp.config.domain.values import MISSING, ConfigValue, MissingType
+from l3io.wp.config.domain.values import (
+    MISSING,
+    ConfigValue,
+    EnvLookup,
+    Expression,
+    MissingType,
+)
 
 __all__ = [
     "__version__",
     "MISSING",
     "ConfigKeyError",
+    "ConfigLookupError",
     "ConfigReadError",
     "ConfigValue",
     "ConfigValueError",
     "ConfigWriteError",
+    "EnvLookup",
+    "Expression",
     "MissingType",
     "ReadBackError",
     "WpConfigError",

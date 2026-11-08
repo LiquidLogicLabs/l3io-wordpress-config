@@ -19,7 +19,14 @@ from typing import Any
 
 import pytest
 
-from l3io.wp.config import MISSING, ConfigValue, WpConfigFile, WpConfigString
+from l3io.wp.config import (
+    MISSING,
+    ConfigValue,
+    EnvLookup,
+    Expression,
+    WpConfigFile,
+    WpConfigString,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "wp-config"
 EXPECTED: dict[str, dict[str, Any]] = json.loads((FIXTURES / "expected.json").read_text())
@@ -124,3 +131,31 @@ def test_a_commented_out_key_is_added_live(case, key):
     config = WpConfigString(CASES[case].decode("utf-8"))
     config.set(key, "now-live")
     assert config.get(key) == "now-live"
+
+
+@pytest.mark.parametrize("case", sorted(CASES))
+def test_get_value_never_mistakes_an_expression_for_a_literal(case):
+    """Every literal reads as PHP's value; every other value as a lookup or an expression."""
+    expected = EXPECTED[case]
+    config = WpConfigString(CASES[case].decode("utf-8"))
+    for key, value in expected["values"].items():
+        got = config.get_value(key)
+        assert (got, type(got)) == (value, type(value)), key
+    for key, source in expected["raw"].items():
+        got = config.get_value(key)
+        assert isinstance(got, EnvLookup | Expression), f"{key} read as a literal: {got!r}"
+        assert config.get_source(key) == source
+        if isinstance(got, Expression):
+            assert got.source == source
+
+
+def test_the_docker_image_reads_as_env_lookups():
+    config = WpConfigString(CASES["docker-image"].decode("utf-8"))
+    for key in ("DB_NAME", "DB_USER", "DB_PASSWORD", "DB_HOST", "DB_CHARSET", "AUTH_KEY"):
+        got = config.get_value(key)
+        assert isinstance(got, EnvLookup), key
+        assert got.function == "getenv_docker"
+        assert got.name == f"WORDPRESS_{key}"
+    assert config.get_variable_value("table_prefix") == EnvLookup(
+        "WORDPRESS_TABLE_PREFIX", "wp_", "getenv_docker"
+    )

@@ -19,12 +19,20 @@ from logging import getLogger
 from typing import Literal
 
 from l3io.wp.config.domain.errors import ConfigKeyError, ConfigValueError, ConfigWriteError
-from l3io.wp.config.domain.values import MISSING, ConfigValue, MissingType
+from l3io.wp.config.domain.values import (
+    MISSING,
+    ConfigValue,
+    EnvFunction,
+    EnvLookup,
+    Expression,
+    MissingType,
+)
 
 __all__ = [
     "Constant",
     "Kind",
     "WpConfigString",
+    "read_value",
     "render_define",
     "render_statement",
     "render_value",
@@ -186,6 +194,68 @@ def parse_value(raw: str) -> ConfigValue:
         return text
 
 
+# What get_value() recognises, and nothing more. A literal is a single-quoted string,
+# a double-quoted one with nothing PHP would interpolate or unescape, true/false, or a
+# decimal number; octal (017), hex, `1_000`, null and constants are left as
+# expressions rather than guessed at.
+_SINGLE = r"'(?:[^'\\]|\\.)*'"
+_LITERAL = rf"""{_SINGLE}|"[^"\\$]*"|(?i:true|false)|[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?"""
+_LITERAL_RE = re.compile(_LITERAL)
+_DECIMAL_INT_RE = re.compile(r"[+-]?(?:0|[1-9]\d*)")
+_LEADING_ZERO_RE = re.compile(r"[+-]?0\d")
+_PHP_INT_MAX = 2**63 - 1
+_GETENV_DOCKER_RE = re.compile(
+    rf"(?i:getenv_docker)\s*\(\s*(?P<name>{_SINGLE})\s*,\s*(?P<default>{_LITERAL})\s*\)"
+)
+_GETENV_RE = re.compile(
+    rf"(?i:getenv)\s*\(\s*(?P<name>{_SINGLE})\s*\)(?:\s*\?:\s*(?P<default>{_LITERAL}))?"
+)
+
+
+def _literal(text: str) -> ConfigValue | None:
+    """The PHP value of a literal ``text``, or ``None`` if it is not one this reads."""
+    if not _LITERAL_RE.fullmatch(text):
+        return None
+    if text[0] in "'\"":
+        return text[1:-1] if text[0] == '"' else parse_value(text)
+    lowered = text.lower()
+    if lowered in ("true", "false"):
+        return lowered == "true"
+    if _LEADING_ZERO_RE.match(text) and not text.lstrip("+-").startswith(("0.", "0e", "0E")):
+        return None  # 017 is octal to PHP
+    if _DECIMAL_INT_RE.fullmatch(text):
+        number = int(text)
+        # PHP reads an integer literal past PHP_INT_MAX as a float.
+        return float(number) if abs(number) > _PHP_INT_MAX else number
+    return float(text)
+
+
+def read_value(raw: str) -> ConfigValue | EnvLookup | Expression:
+    """
+    What a value is: a literal's PHP value, an environment lookup, or an expression.
+
+    Never evaluates anything. A shape this does not recognise exactly is an
+    :class:`Expression`, so a caller can refuse it rather than act on a guess.
+    """
+    text = raw.strip()
+    literal = _literal(text)
+    if literal is not None:
+        return literal
+    shapes: tuple[tuple[EnvFunction, re.Pattern[str]], ...] = (
+        ("getenv_docker", _GETENV_DOCKER_RE),
+        ("getenv", _GETENV_RE),
+    )
+    for function, pattern in shapes:
+        m = pattern.fullmatch(text)
+        if m is None:
+            continue
+        name = parse_value(m.group("name"))
+        default = None if m.group("default") is None else _literal(m.group("default"))
+        if isinstance(name, str) and name:
+            return EnvLookup(name=name, default=default, function=function)
+    return Expression(source=text)
+
+
 def render_value(key: str, value: ConfigValue) -> str:
     """The PHP literal for ``value``. Raises :class:`ConfigValueError` otherwise."""
     # bool before int: bool is a subclass of int.
@@ -270,6 +340,38 @@ class WpConfigString:
     def set_variable(self, key: str, value: ConfigValue) -> bool:
         """Set the file-scope variable ``key`` (named without its ``$``)."""
         return self._set("variable", key, value)
+
+    def get_value(self, key: str) -> ConfigValue | EnvLookup | Expression | MissingType:
+        """
+        The ``define()`` constant ``key``: a literal, an :class:`EnvLookup`, an
+        :class:`Expression`, or :data:`MISSING`.
+
+        Unlike :meth:`get`, an expression is never returned as a ``str`` that could be
+        mistaken for a literal.
+        """
+        return self._read("define", key)
+
+    def get_variable_value(self, key: str) -> ConfigValue | EnvLookup | Expression | MissingType:
+        """The file-scope variable ``key``, read as :meth:`get_value` reads a constant."""
+        return self._read("variable", key)
+
+    def get_source(self, key: str) -> str | MissingType:
+        """The value of the ``define()`` constant ``key`` exactly as written, or :data:`MISSING`."""
+        return self._raw("define", key)
+
+    def get_variable_source(self, key: str) -> str | MissingType:
+        """The value of the file-scope variable ``key`` exactly as written, or :data:`MISSING`."""
+        return self._raw("variable", key)
+
+    def _raw(self, kind: Kind, key: str) -> str | MissingType:
+        for constant in scan(self._content):
+            if constant.kind == kind and constant.key == key:
+                return constant.raw_value
+        return MISSING
+
+    def _read(self, kind: Kind, key: str) -> ConfigValue | EnvLookup | Expression | MissingType:
+        raw = self._raw(kind, key)
+        return raw if isinstance(raw, MissingType) else read_value(raw)
 
     def _get(self, kind: Kind, key: str) -> ConfigValue | MissingType:
         for constant in scan(self._content):

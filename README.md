@@ -37,7 +37,8 @@ Its scope is deliberately bounded, and the boundaries are these:
 - Quoted strings are read whole, so a `)`, `;` or quote inside one never ends
   the value. WordPress's own salts contain `);` in about one site in thirteen.
 - A value that is a **PHP expression** or references another constant is
-  returned as its raw source text, not evaluated.
+  returned by `get()` as its raw source text, not evaluated. `get_value()` says which
+  it is instead; see below.
 - Adding a constant inserts after the **first** `<?php` opening tag, ending in the
   file's own line ending. A file with no `<?php` followed by a newline cannot have
   one inserted, and raises `ConfigWriteError`.
@@ -94,6 +95,45 @@ for a literal.** `get()` returns an expression as its source text, and `set()` w
 `str` as a quoted string, so the official Docker image's
 `define( 'DB_NAME', getenv_docker('WORDPRESS_DB_NAME', 'wordpress') );` copied that
 way becomes a database literally named `getenv_docker('WORDPRESS_DB_NAME', 'wordpress')`.
+
+## Literals, environment lookups and expressions
+
+`get()` returns an expression as its source text, a `str` indistinguishable from a
+quoted literal. The official `wordpress` Docker image writes every `DB_*` that way:
+`define( 'DB_HOST', getenv_docker('WORDPRESS_DB_HOST', 'mysql') );`. Use `get_value()`
+(and `get_variable_value()`) wherever the difference matters. It returns one of:
+
+- the literal's PHP value: `str`, `bool`, `int` or `float`;
+- an `EnvLookup(name, default, function)`, for exactly `getenv_docker('NAME', <literal>)`
+  or `getenv('NAME')`, optionally with `?: <literal>`;
+- an `Expression(source)`, for anything else, including octal and hex numbers, `null`,
+  constants and concatenation;
+- `MISSING`.
+
+`EnvLookup.resolve(environ, read_file=None)` gives the value PHP would define, so a
+caller never re-implements PHP's rules. Those rules differ by shape:
+- `getenv_docker` reads the file named by `NAME_FILE` (Docker secrets) when that is
+  set, then `NAME` even if it is empty, then the default;
+- `?:` falls back on `''` and `'0'` too;
+- a bare `getenv` gives `False` when the variable is unset.
+
+`read_file` is needed only when a `NAME_FILE` is set:
+
+```python
+import os
+from pathlib import Path
+from l3io.wp.config import EnvLookup, Expression, WpConfigFile
+
+value = WpConfigFile("/var/www/html/wp-config.php").get_value("DB_HOST")
+if isinstance(value, EnvLookup):
+    value = value.resolve(os.environ, lambda p: Path(p).read_text(encoding="utf-8"))
+elif isinstance(value, Expression):
+    raise SystemExit(f"DB_HOST is PHP code this cannot evaluate: {value.source}")
+```
+
+`get_source()` and `get_variable_source()` return a value exactly as written, for
+copying a define verbatim. PHP 8.4 grades all of this in the test suite: every literal
+reading, and 200 random lookups across every environment state.
 
 ## Install
 

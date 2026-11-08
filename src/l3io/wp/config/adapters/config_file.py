@@ -18,7 +18,7 @@ from pathlib import Path
 from l3io.wp.config.core.config_string import Kind, WpConfigString
 from l3io.wp.config.core.verification import verify_write
 from l3io.wp.config.domain.errors import ConfigReadError, ConfigWriteError, ReadBackError
-from l3io.wp.config.domain.values import ConfigValue, MissingType
+from l3io.wp.config.domain.values import ConfigValue, EnvLookup, Expression, MissingType
 
 __all__ = ["WpConfigFile"]
 
@@ -65,6 +65,25 @@ class WpConfigFile:
         ``result is MISSING`` rather than truthiness.
         """
         return self._config.get(key)
+
+    def get_value(self, key: str) -> ConfigValue | EnvLookup | Expression | MissingType:
+        """
+        The constant ``key``: a literal, an :class:`EnvLookup`, an :class:`Expression`,
+        or :data:`MISSING`. See :meth:`WpConfigString.get_value`.
+        """
+        return self._config.get_value(key)
+
+    def get_variable_value(self, key: str) -> ConfigValue | EnvLookup | Expression | MissingType:
+        """The file-scope variable ``key``, read as :meth:`get_value` reads a constant."""
+        return self._config.get_variable_value(key)
+
+    def get_source(self, key: str) -> str | MissingType:
+        """The value of the constant ``key`` exactly as written, or :data:`MISSING`."""
+        return self._config.get_source(key)
+
+    def get_variable_source(self, key: str) -> str | MissingType:
+        """The value of the variable ``key`` exactly as written, or :data:`MISSING`."""
+        return self._config.get_variable_source(key)
 
     def set(self, key: str, value: ConfigValue) -> bool:
         """

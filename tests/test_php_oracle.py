@@ -10,11 +10,19 @@ fixture in ``conftest.py`` skips without docker, or fails under
 from __future__ import annotations
 
 import random
+from collections.abc import Callable
 from typing import Any
 
 from tests.test_real_configs import CASES, EXPECTED, rewrite
 
-from l3io.wp.config import ConfigWriteError, ReadBackError, WpConfigString
+from l3io.wp.config import (
+    ConfigWriteError,
+    EnvLookup,
+    Expression,
+    MissingType,
+    ReadBackError,
+    WpConfigString,
+)
 from l3io.wp.config.domain.values import ConfigValue
 
 RANDOM_CASES = 300
@@ -138,3 +146,164 @@ def test_random_writes_land_as_php_reads_them(php_read):
     ]
     problems += [f"{name}: PHP warned: {w}" for name in cases for w in seen[name]["warnings"]]
     assert problems == [], f"{len(problems)} disagreements, first: {problems[:5]}"
+
+
+# ---- get_value() and EnvLookup.resolve(), graded by PHP ------------------------
+
+_DOCKER_HELPER = (
+    CASES["docker-image"]
+    .decode()
+    .replace("\r\n", "\n")  # the fixture is CRLF, as the image ships it
+    .split("if (!function_exists('getenv_docker')) {", 1)[1]
+    .split("\n}\n", 1)[0]
+)
+#: The official image's own getenv_docker(), copied from the fixture, not rewritten.
+DOCKER_HELPER = "if (!function_exists('getenv_docker')) {" + _DOCKER_HELPER + "\n}\n"
+
+_LITERAL_SOURCES = [
+    "'plain'",
+    r"'it\'s'",
+    r"'back\\slash'",
+    r"'a\nb'",
+    "''",
+    '"dq"',
+    '""',
+    "true",
+    "TRUE",
+    "false",
+    "0",
+    "-0",
+    "+7",
+    "42",
+    "-42",
+    "017",
+    "0x1A",
+    "1_000",
+    "9223372036854775807",
+    "9223372036854775808",
+    "-9223372036854775808",
+    "3.5",
+    "-.5",
+    "1.",
+    "1e3",
+    "2E-2",
+    "0.0",
+    "null",
+    '"has $x"',
+]
+
+
+def test_every_literal_reading_is_phps(php_read):
+    """When get_value() says a value is a literal, it is the value PHP defines."""
+    body = "".join(f"define('L{i}', {src});\n" for i, src in enumerate(_LITERAL_SOURCES))
+    content = f"<?php\n$x = 'X';\n{body}"
+    seen = php_read({"literals": content.encode()})["literals"]
+    config = WpConfigString(content)
+    problems = []
+    for i, src in enumerate(_LITERAL_SOURCES):
+        ours = config.get_value(f"L{i}")
+        if isinstance(ours, Expression | EnvLookup | MissingType):
+            continue
+        php = seen["constants"].get(f"L{i}")
+        if not _same(php, ours):
+            problems.append(f"{src}: we read {ours!r}, PHP defines {php!r}")
+    assert problems == []
+    readings = [config.get_value(f"L{i}") for i in range(len(_LITERAL_SOURCES))]
+    assert sum(isinstance(r, Expression) for r in readings) <= 6, "the test reads literals"
+
+
+def _env_state(rng: random.Random, name: str) -> tuple[dict[str, str], dict[str, bytes]]:
+    """A random environment for ``name``: unset, empty, '0', a value, and/or a secret file."""
+    env: dict[str, str] = {}
+    files: dict[str, bytes] = {}
+    choice = rng.choice(["unset", "empty", "zero", "value"])
+    if choice != "unset":
+        env[name] = {"empty": "", "zero": "0", "value": f"v-{rng.randint(0, 999)}"}[choice]
+    file_choice = rng.choice(["none", "none", "empty", "zero", "file"])
+    if file_choice in ("empty", "zero"):
+        env[f"{name}_FILE"] = "" if file_choice == "empty" else "0"
+    elif file_choice == "file":
+        ending = rng.choice(["", "\n", "\r\n"])
+        files[f"secret_{name}"] = f"from-file-{rng.randint(0, 999)}{ending}".encode()
+    return env, files
+
+
+def test_env_lookups_resolve_as_php_resolves_them(php_read):
+    """resolve() gives what PHP defines, for every lookup shape and environment state."""
+    rng = random.Random(20261108)  # noqa: S311 - test data, seeded to reproduce
+    shapes: list[Callable[[str], str]] = [
+        lambda n: f"getenv_docker('{n}', 'fallback')",
+        lambda n: f"getenv_docker('{n}', '')",
+        lambda n: f"getenv('{n}')",
+        lambda n: f"getenv('{n}') ?: 'fallback'",
+        lambda n: f"GETENV( '{n}' ) ?: 5",
+    ]
+    cases: dict[str, bytes] = {}
+    env: dict[str, dict[str, str]] = {}
+    files: dict[str, dict[str, bytes]] = {}
+    expected: dict[str, list[tuple[str, EnvLookup, dict[str, str], dict[str, bytes]]]] = {}
+    for n in range(40):
+        case = f"e{n:02d}"
+        body, case_env, case_files, keys = "", {}, {}, []
+        for k, shape in enumerate(shapes):
+            name = f"L3IO_E{n}_{k}"
+            var_env, var_files = _env_state(rng, name)
+            for fname in var_files:
+                var_env[f"{name}_FILE"] = f"/w/{case}/{fname}"
+            case_env.update(var_env)
+            case_files.update(var_files)
+            body += f"define('K{k}', {shape(name)});\n"
+            keys.append((f"K{k}", var_env, var_files))
+        content = f"<?php\n{DOCKER_HELPER}{body}"
+        cases[case] = content.encode()
+        env[case], files[case] = case_env, case_files
+        config = WpConfigString(content)
+        expected[case] = []
+        for key, var_env, var_files in keys:
+            lookup = config.get_value(key)
+            assert isinstance(lookup, EnvLookup), (key, lookup)
+            expected[case].append((key, lookup, var_env, var_files))
+
+    seen = php_read(cases, env=env, files=files)
+    problems = []
+    for case, entries in expected.items():
+        for key, lookup, var_env, var_files in entries:
+            by_path = {f"/w/{case}/{f}": data.decode() for f, data in var_files.items()}
+            ours = lookup.resolve(var_env, by_path.__getitem__)
+            php = seen[case]["constants"].get(key)
+            if not _same(php, ours):
+                problems.append(f"{case} {key} {lookup} env={var_env}: ours {ours!r}, PHP {php!r}")
+    assert problems == [], f"{len(problems)} disagreements, first: {problems[:5]}"
+
+
+def test_the_docker_image_resolves_as_php_resolves_it(php_read):
+    """The official image's own config, with its WORDPRESS_* environment, end to end."""
+    content = CASES["docker-image"]
+    config = WpConfigString(content.decode())
+    environ = {
+        "WORDPRESS_DB_HOST": "db:3306",
+        "WORDPRESS_DB_USER": "wp",
+        "WORDPRESS_DB_NAME": "",
+        "WORDPRESS_TABLE_PREFIX": "site_",
+        "WORDPRESS_DB_PASSWORD_FILE": "/w/docker/db_password",
+    }
+    secret = b"s3cr3t'\"\n"
+    seen = php_read(
+        {"docker": content}, env={"docker": environ}, files={"docker": {"db_password": secret}}
+    )["docker"]
+    read = {"/w/docker/db_password": secret.decode()}.__getitem__
+    problems = []
+    for key, php in seen["constants"].items():
+        ours = config.get_value(key)
+        if isinstance(ours, EnvLookup):
+            resolved = ours.resolve(environ, read)
+            if not _same(php, resolved):
+                problems.append(f"{key}: ours {resolved!r}, PHP {php!r}")
+        elif not isinstance(ours, Expression):
+            problems.append(f"{key}: read as a literal, {ours!r}")
+    prefix = config.get_variable_value("table_prefix")
+    assert isinstance(prefix, EnvLookup)
+    assert prefix.resolve(environ, read) == seen["table_prefix"] == "site_"
+    assert problems == []
+    assert seen["constants"]["DB_PASSWORD"] == "s3cr3t'\""
+    assert isinstance(config.get_value("WP_DEBUG"), Expression)

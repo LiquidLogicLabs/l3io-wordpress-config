@@ -12,6 +12,7 @@ from __future__ import annotations
 
 __all__ = [
     "ConfigKeyError",
+    "ConfigLookupError",
     "ConfigReadError",
     "ConfigValueError",
     "ConfigWriteError",
@@ -68,6 +69,16 @@ class ConfigValueError(WpConfigError):
         super().__init__(
             f"Cannot render a value of type {value_type!r} for key {key!r}; {self.reason}"
         )
+
+
+class ConfigLookupError(WpConfigError):
+    """An environment lookup could not be built or resolved."""
+
+    def __init__(self, name: str, reason: str) -> None:
+        self.name = name
+        self.reason = reason
+        # The variable is named; its value never is -- it may be a credential.
+        super().__init__(f"Cannot resolve environment variable {name!r}: {reason}")
 
 
 class ReadBackError(WpConfigError):

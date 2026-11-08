@@ -40,6 +40,8 @@ HOSTILE: list[Any] = [
     "x\ny",
     "a\0b",
     "\udcff",  # a lone surrogate: valid str, unencodable as UTF-8
+    {"WORDPRESS_DB_HOST_FILE": "/nonexistent/secret"},  # an environ that needs read_file
+    lambda path: 1 / 0,  # a read_file that raises something arbitrary
 ]
 
 
@@ -87,11 +89,22 @@ def _file_instances(tmp_path: Path) -> list[Any]:
     return [config.WpConfigFile(path)]
 
 
+def _lookup_instances(tmp_path: Path) -> list[Any]:
+    # Every hostile environ is refused before use; the getenv_docker one is resolved
+    # with each hostile read_file too, since a NAME_FILE path is set in environ.
+    return [
+        config.EnvLookup("WORDPRESS_DB_HOST", "mysql", "getenv_docker"),
+        config.EnvLookup("DB_HOST", "localhost", "getenv"),
+        config.EnvLookup("DB_HOST"),
+    ]
+
+
 #: Keyed by class. A public class with no entry fails the test below rather than
 #: going unexercised, so this mapping cannot fall behind __all__ silently.
 FACTORIES: dict[type, Callable[[Path], list[Any]]] = {
     config.WpConfigString: _string_instances,
     config.WpConfigFile: _file_instances,
+    config.EnvLookup: _lookup_instances,
 }
 
 
