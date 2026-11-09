@@ -17,13 +17,14 @@ state tree is empty by design.
 
 ## Current state (2026-11-08)
 
-- Last release: **`v0.1.5`** (2026-11-08), `get_value()` (below). Before it,
+- Last release: **`v0.1.6`** (2026-11-08), `set_source()` (below). Before it,
+  **`v0.1.5`** (2026-11-08), `get_value()`; before that,
   **`v0.1.4`** (2026-11-07), `replace_content()`; before that,
   **`v0.1.3`** (2026-11-02), the first on TestPyPI; before that,
   **`v0.1.2`** (2026-10-29), the scanner fixes; before that, **`v0.1.1`**
   (2026-10-20), the write-permission fix; and before that,
   **`v0.1.0`** (2026-10-12, Shawn), on GitHub Releases and the internal Gitea
-  registry, with floating `v0` and `v0.1` now pointing at `v0.1.5`. Nothing is on PyPI; `v0.1.3` to `v0.1.5` are on TestPyPI. Verified by
+  registry, with floating `v0` and `v0.1` now pointing at `v0.1.6`. Nothing is on PyPI; `v0.1.3` to `v0.1.6` are on TestPyPI. Verified by
   installing from both the release wheel and the Gitea index. Its notes first published
   as "no changes": the builder took the floating `v0.1` as the previous tag. That is
   fixed in `14512f0`, and the release body was rebuilt from `v0.0.2..v0.1.0` using
@@ -77,6 +78,22 @@ file left), and by `make ci` under act: 11 of 11.
   2026-10-20. Separately, this session's shell had no `INFISICAL_API_URL`, so the CLI
   went to `app.infisical.com` and got 403; `INFISICAL_API_URL=https://secops.ravenwolf.org/api`
   fixed it. That is the host's environment, not this repo's.
+
+## 2026-11-08: v0.1.6, `set_source()`; the release rule, enforced
+
+- **Family rule (Shawn):** green GitHub CI and a local `make preflight` before any release.
+  Enforced by `make preflight` and `make release` (`8dce311`), and by `release.yml`'s first
+  step (`815a751`, ported from the binder's `599bb5b`). Database confirmed its own release
+  matches config's shape: no bump commit, it refuses unless CI and the audit are green.
+- **0.1.6** (`85c268a`, backup's owner decision 48): `set_source()` /
+  `set_variable_source()` write source verbatim. The check is structural, not a PHP parse.
+  PHP grades restore-from-source over the whole corpus, Docker `DB_*` carried into another
+  config, and 200 generated expressions. 464 tests, 96.88%, floor 96.8. The first release
+  under the rule: preflight, then CI 11/11 and audit green, then `make release`; the gate
+  confirmed both on the SHA. Release run 42539635711, mirror publish 42539670799, TestPyPI
+  publish 42539780142. Verified from the TestPyPI install.
+- Backup was told: an archived config needs `getenv_docker()` defined for carried Docker
+  lookups to work.
 
 ## 2026-11-08: v0.1.5, `get_value()` and `EnvLookup` (backup's pre-release request)
 
