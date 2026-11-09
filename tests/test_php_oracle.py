@@ -9,6 +9,7 @@ fixture in ``conftest.py`` skips without docker, or fails under
 
 from __future__ import annotations
 
+import json
 import random
 from collections.abc import Callable
 from typing import Any
@@ -23,6 +24,7 @@ from l3io.wp.config import (
     ReadBackError,
     WpConfigString,
 )
+from l3io.wp.config.core.config_string import render_value
 from l3io.wp.config.domain.values import ConfigValue
 
 RANDOM_CASES = 300
@@ -307,3 +309,126 @@ def test_the_docker_image_resolves_as_php_resolves_it(php_read):
     assert problems == []
     assert seen["constants"]["DB_PASSWORD"] == "s3cr3t'\""
     assert isinstance(config.get_value("WP_DEBUG"), Expression)
+
+
+# ---- set_source(), graded by PHP ------------------------------------------------
+
+_DOCKER_ENV = {
+    "WORDPRESS_DB_HOST": "db:3306",
+    "WORDPRESS_DB_USER": "wp",
+    "WORDPRESS_TABLE_PREFIX": "site_",
+    "WORDPRESS_DEBUG": "1",
+}
+
+
+def test_restoring_every_value_from_its_source_is_exact(php_read):
+    """Overwrite every key with junk, then restore it with set_source(get_source()).
+
+    PHP must read the original back.
+    """
+    restored: dict[str, bytes] = {}
+    for case, data in CASES.items():
+        original = WpConfigString(data.decode())
+        config = WpConfigString(data.decode())
+        keys = [*EXPECTED[case]["values"], *EXPECTED[case]["raw"]]
+        for key in keys:
+            config.set(key, "junk")
+        for key in keys:
+            source = original.get_source(key)
+            assert isinstance(source, str)
+            config.set_source(key, source)
+        prefix = original.get_variable_source("table_prefix")
+        if isinstance(prefix, str):
+            config.set_variable("table_prefix", "junk_")
+            config.set_variable_source("table_prefix", prefix)
+        assert config.content == original.content, f"{case}: not byte-identical"
+        restored[f"{case}--restored"] = config.content.encode()
+    env = dict.fromkeys([*CASES, *restored], _DOCKER_ENV)
+    seen = php_read({**CASES, **restored}, env=env)
+
+    def reading(name: str, directory: str) -> str:
+        # __DIR__ differs per case directory; nothing else may.
+        return json.dumps(seen[name], sort_keys=True).replace(f"/w/{directory}/", "/w/CASE/")
+
+    problems = [
+        f"{case}: PHP reads the restored config differently"
+        for case in CASES
+        if reading(case, case) != reading(f"{case}--restored", f"{case}--restored")
+    ]
+    problems += [f"{c}: PHP warned: {w}" for c in restored for w in seen[c]["warnings"]]
+    assert problems == []
+
+
+def test_docker_sources_carried_into_another_config_resolve_as_in_the_original(php_read):
+    """Backup's --overwrite-wp-config: the target's DB_* carried into the Archive's config."""
+    target = WpConfigString(CASES["docker-image"].decode())
+    archived = WpConfigString(CASES["wordpress-sample-lf"].decode())
+    for key in ("DB_NAME", "DB_USER", "DB_PASSWORD", "DB_HOST"):
+        source = target.get_source(key)
+        assert isinstance(source, str)
+        archived.set_source(key, source)
+    # The archived config must define getenv_docker for those calls; a real one from
+    # the same image does. This adds the image's own helper, unchanged.
+    carried = archived.content.replace("<?php\n", "<?php\n" + DOCKER_HELPER, 1)
+    seen = php_read(
+        {"target": CASES["docker-image"], "carried": carried.encode()},
+        env={"target": _DOCKER_ENV, "carried": _DOCKER_ENV},
+    )
+    for key in ("DB_NAME", "DB_USER", "DB_PASSWORD", "DB_HOST"):
+        assert seen["carried"]["constants"][key] == seen["target"]["constants"][key], key
+    assert seen["carried"]["constants"]["DB_HOST"] == "db:3306"
+    assert seen["carried"]["warnings"] == []
+
+
+def _expression(rng: random.Random, depth: int = 0) -> str:
+    """A random valid PHP expression in the shapes real configs use."""
+    atoms: list[Callable[[], str]] = [
+        lambda: render_value("K", _random_text(rng)),
+        lambda: str(rng.randint(-1000, 1000)),
+        lambda: rng.choice(["true", "false"]),
+        lambda: f"(getenv('L3IO_X{rng.randint(0, 3)}') ?: {render_value('K', _random_text(rng))})",
+        lambda: "$_SERVER['HTTP_HOST']",
+        lambda: "PHP_INT_SIZE",
+    ]
+    if depth >= 2:
+        return rng.choice(atoms)()
+    shapes: list[Callable[[], str]] = [
+        lambda: rng.choice(atoms)(),
+        lambda: f"{_expression(rng, depth + 1)} . {_expression(rng, depth + 1)}",
+        lambda: f"!!{_expression(rng, depth + 1)}",
+        lambda: (
+            f"( {_expression(rng, depth + 1)} ? {_expression(rng, depth + 1)}"
+            f" : {_expression(rng, depth + 1)} )"
+        ),
+    ]
+    return rng.choice(shapes)()
+
+
+def _top_expression(rng: random.Random) -> str:
+    """An expression, or an array of them: arrays appear only at the top, as in real configs."""
+    if rng.random() < 0.15:
+        return f"[ {_expression(rng, 1)}, 'k' => {_expression(rng, 1)} ]"
+    return _expression(rng)
+
+
+def test_random_expressions_copied_by_set_source_mean_the_same_to_php(php_read):
+    rng = random.Random(20261108)  # noqa: S311 - test data, seeded to reproduce
+    exprs = [_top_expression(rng) for _ in range(200)]
+    original = "<?php\n" + "".join(f"define('E{i}', {e});\n" for i, e in enumerate(exprs))
+    copy = WpConfigString(CASES["wordpress-sample-lf"].decode())
+    for i, e in enumerate(exprs):
+        assert copy.set_source(f"E{i}", e) is True
+        assert copy.get_source(f"E{i}") == e
+    env = {"L3IO_X0": "zero", "L3IO_X1": "", "L3IO_X2": "0"}
+    seen = php_read(
+        {"original": original.encode(), "copy": copy.content.encode()},
+        env={"original": env, "copy": env},
+    )
+    assert seen["copy"]["warnings"] == []
+    problems = [
+        f"E{i} = {e}: original {seen['original']['constants'].get(f'E{i}')!r}, "
+        f"copy {seen['copy']['constants'].get(f'E{i}')!r}"
+        for i, e in enumerate(exprs)
+        if seen["original"]["constants"].get(f"E{i}") != seen["copy"]["constants"].get(f"E{i}")
+    ]
+    assert problems == [], f"{len(problems)} disagreements, first: {problems[:3]}"

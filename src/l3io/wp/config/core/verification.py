@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from l3io.wp.config.core.config_string import Constant, Kind, render_value, scan
+from l3io.wp.config.core.config_string import Constant, Kind, SourceText, render_value, scan
 from l3io.wp.config.domain.values import ConfigValue
 
 __all__ = ["verify_write"]
@@ -21,7 +21,7 @@ def verify_write(
     *,
     before: str,
     actual: str,
-    written: dict[tuple[Kind, str], ConfigValue],
+    written: dict[tuple[Kind, str], ConfigValue | SourceText],
 ) -> list[str]:
     """
     Check ``actual`` against ``before`` for the writes in ``written``.
@@ -56,7 +56,7 @@ def verify_write(
     #    Comparing whole statements against a canonical rendering would reject
     #    correct writes to almost every real wp-config.php.
     for (kind, key), value in written.items():
-        intended = render_value(key, value)
+        intended = value.text if isinstance(value, SourceText) else render_value(key, value)
         found = after.get((kind, key))
         if found is None:
             problems.append(f"{key!r} ({kind}) is absent after writing it")

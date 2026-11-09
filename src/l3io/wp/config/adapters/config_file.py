@@ -15,7 +15,7 @@ from collections.abc import Callable
 from logging import getLogger
 from pathlib import Path
 
-from l3io.wp.config.core.config_string import Kind, WpConfigString
+from l3io.wp.config.core.config_string import Kind, SourceText, WpConfigString
 from l3io.wp.config.core.verification import verify_write
 from l3io.wp.config.domain.errors import ConfigReadError, ConfigWriteError, ReadBackError
 from l3io.wp.config.domain.values import ConfigValue, EnvLookup, Expression, MissingType
@@ -153,11 +153,27 @@ class WpConfigFile:
         _log.debug("%s replaced and verified.", self._path)
         return True
 
-    def _set(self, kind: Kind, key: str, value: ConfigValue) -> bool:
+    def set_source(self, key: str, source: str) -> bool:
+        """
+        Set the constant ``key`` to the PHP source ``source``, verbatim, verified as
+        :meth:`set` is. See :meth:`WpConfigString.set_source` for what is refused.
+        """
+        return self._set("define", key, SourceText(source))
+
+    def set_variable_source(self, key: str, source: str) -> bool:
+        """Set the variable ``key`` to ``source``, as :meth:`set_source` does."""
+        return self._set("variable", key, SourceText(source))
+
+    def _set(self, kind: Kind, key: str, value: ConfigValue | SourceText) -> bool:
         before = self._config.content
         working = WpConfigString(before)
-        mutate = working.set if kind == "define" else working.set_variable
-        if not mutate(key, value):
+        if isinstance(value, SourceText):
+            changed = (working.set_source if kind == "define" else working.set_variable_source)(
+                key, value.text
+            )
+        else:
+            changed = (working.set if kind == "define" else working.set_variable)(key, value)
+        if not changed:
             _log.debug("%r already up to date in %s; not rewriting.", key, self._path)
             return False
 

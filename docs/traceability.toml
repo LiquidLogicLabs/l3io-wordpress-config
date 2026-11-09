@@ -174,6 +174,8 @@ enforced_by = [
     "tests/test_file_adapter.py::test_replace_content_writes_exactly_the_text_given",
     "tests/test_file_adapter.py::test_replace_content_refuses_text_with_a_duplicate_definition",
     "tests/test_file_adapter.py::test_replace_content_refuses_what_is_not_text",
+    "tests/test_set_source.py::test_the_file_adapter_writes_and_verifies_the_source",
+    "tests/test_set_source.py::test_the_file_adapter_refuses_before_touching_the_file",
 ]
 note = "Requirements 2 and 4: the atomic config write, which backup delegates to this package, and that it keeps the file's mode. Journal and staging cutover are backup's. Ownership is kept when permitted and the write is refused when not; a non-root writer of a file owned by another user is refused rather than taking it over."
 
@@ -366,6 +368,10 @@ enforced_by = [
     "tests/test_php_oracle.py::test_every_literal_reading_is_phps",
     "tests/test_php_oracle.py::test_env_lookups_resolve_as_php_resolves_them",
     "tests/test_php_oracle.py::test_the_docker_image_resolves_as_php_resolves_it",
+    "tests/test_set_source.py::test_structurally_unsafe_sources_are_refused",
+    "tests/test_set_source.py::test_copying_get_source_between_configs_is_exact",
+    "tests/test_php_oracle.py::test_restoring_every_value_from_its_source_is_exact",
+    "tests/test_php_oracle.py::test_random_expressions_copied_by_set_source_mean_the_same_to_php",
 ]
 not_checkable = "The 'Revisit when' conditions are events in the world, not properties of this code. The ADR now records that condition (a) was met on 2026-10-12 and fixed within Option C, and that (b) is not met."
 
@@ -493,3 +499,9 @@ id = "ADR-0025"
 source_sha256 = "30591578c7ed5fd1396a7b3265bbf1f4d89e06fc99cd08efbf04623131a4838f"
 binds = false
 reason = "Backup's api/ composes through its cli/ drivers, so library and CLI run one sequence. Backup's composition; nothing here."
+
+[[rule]]
+id = "ADR-0027"
+source_sha256 = "6fa5bf95f9e50be9d2e7732a342ae801d1ec0b97c747964cdfcfd9ede3c8a624"
+binds = false
+reason = "Restoring a site whose DB_NAME is an environment lookup by swapping tables into the live name. Backup's sequence and database's SQL. It relies on this package only to read the lookup (get_value, v0.1.5) and, for --overwrite-wp-config, to write source text (set_source, v0.1.6); those are AD-18's and ADR-0010's rows."

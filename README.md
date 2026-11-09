@@ -131,8 +131,20 @@ elif isinstance(value, Expression):
     raise SystemExit(f"DB_HOST is PHP code this cannot evaluate: {value.source}")
 ```
 
-`get_source()` and `get_variable_source()` return a value exactly as written, for
-copying a define verbatim. PHP 8.4 grades all of this in the test suite: every literal
+`get_source()` and `get_variable_source()` return a value exactly as written, and
+`set_source(key, source)` and `set_variable_source(key, source)` write one verbatim,
+through the same verified write as `set()`. So an environment lookup can be carried
+from one config into another as a lookup, not turned into a string:
+
+```python
+archived.set_source("DB_HOST", target.get_source("DB_HOST"))
+```
+
+`set_source()` refuses, with `ConfigValueError`, any source that could end the
+statement, open a comment, leave PHP or unbalance a bracket, and any that would not
+read back as written. That check is **structural, not a PHP parse**: text that is
+balanced but is not a valid expression would be written. Pass source that came
+from a working config, which is what `get_source()` returns. PHP 8.4 grades all of this in the test suite: every literal
 reading, and 200 random lookups across every environment state.
 
 ## Install

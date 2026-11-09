@@ -31,6 +31,7 @@ from l3io.wp.config.domain.values import (
 __all__ = [
     "Constant",
     "Kind",
+    "SourceText",
     "WpConfigString",
     "read_value",
     "render_define",
@@ -256,6 +257,74 @@ def read_value(raw: str) -> ConfigValue | EnvLookup | Expression:
     return Expression(source=text)
 
 
+@dataclass(frozen=True)
+class SourceText:
+    """A value given as PHP source, to be written verbatim. Internal to the write path."""
+
+    text: str
+
+
+# Tokens of a source value: a whole quoted string, or one character of code.
+_SOURCE_TOKEN_RE = re.compile(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"|.", re.DOTALL)
+# Outside strings, any of these could end the statement, hide the rest of the line,
+# leave PHP mode, or start a construct the scanner does not track.
+_UNSAFE_CODE = (";", "?>", "<?", "/*", "*/", "//", "#", "<<<", "`")
+_BRACKETS = {"(": ")", "[": "]", "{": "}"}
+
+
+def check_source(kind: Kind, key: str, source: object) -> str:
+    """
+    ``source`` if it is safe to write verbatim as ``key``'s value, else raise.
+
+    Structural only: it does not prove ``source`` is a valid PHP expression.
+
+    Raises:
+        ConfigValueError: naming the key and the reason, never quoting the source.
+    """
+    if not isinstance(source, str):
+        raise ConfigValueError(key=key, value_type=type(source).__name__)
+    reason = _source_problem(kind, key, source)
+    if reason is not None:
+        raise ConfigValueError(key=key, value_type="source", reason=reason)
+    return source
+
+
+def _source_problem(kind: Kind, key: str, source: str) -> str | None:
+    """Why ``source`` cannot be written verbatim, or ``None`` if it can."""
+    if not source.strip():
+        return "the source is empty"
+    if "\n" in source or "\r" in source:
+        return "a source must sit on one line"
+    if source != source.strip():
+        return "a source must not start or end with whitespace"
+
+    stack: list[str] = []
+    code: list[str] = []
+    for piece in _SOURCE_TOKEN_RE.findall(source):
+        if len(piece) > 1:
+            code.append(" ")  # a whole string: data, whatever it holds
+            continue
+        if piece in "'\"":
+            return "the source has an unterminated string"
+        code.append(piece)
+        if piece in _BRACKETS:
+            stack.append(_BRACKETS[piece])
+        elif piece in _BRACKETS.values() and (not stack or stack.pop() != piece):
+            return "the source's brackets do not balance"
+    if stack:
+        return "the source's brackets do not balance"
+    outside = "".join(code)
+    for marker in _UNSAFE_CODE:
+        if marker in outside:
+            return f"{marker!r} outside a string could end or hide the statement"
+
+    statement = f"define('{key}', {source});" if kind == "define" else f"${key} = {source};"
+    found = scan(f"<?php\n{statement}\n")
+    if len(found) != 1 or found[0].raw_value != source:
+        return "the source would not read back as written"
+    return None
+
+
 def render_value(key: str, value: ConfigValue) -> str:
     """The PHP literal for ``value``. Raises :class:`ConfigValueError` otherwise."""
     # bool before int: bool is a subclass of int.
@@ -341,6 +410,30 @@ class WpConfigString:
         """Set the file-scope variable ``key`` (named without its ``$``)."""
         return self._set("variable", key, value)
 
+    def set_source(self, key: str, source: str) -> bool:
+        """
+        Set the ``define()`` constant ``key`` to the PHP source ``source``, verbatim.
+
+        For copying a value as code, such as ``get_source(key)`` from another config.
+        Refused with :class:`ConfigValueError` when ``source`` could end the statement,
+        open a comment, leave PHP or unbalance a bracket, or would not read back as
+        written. That check is structural: it does not prove ``source`` is valid PHP,
+        so pass source that came from a working config.
+
+        Returns ``True`` if the content changed.
+        """
+        return self._put_checked("define", key, source)
+
+    def set_variable_source(self, key: str, source: str) -> bool:
+        """Set the file-scope variable ``key`` to ``source``, as :meth:`set_source` does."""
+        return self._put_checked("variable", key, source)
+
+    def _put_checked(self, kind: Kind, key: str, source: str) -> bool:
+        _check_key(key)
+        text = check_source(kind, key, source)
+        statement = f"define('{key}', {text});" if kind == "define" else f"${key} = {text};"
+        return self._put(kind, key, text, statement)
+
     def get_value(self, key: str) -> ConfigValue | EnvLookup | Expression | MissingType:
         """
         The ``define()`` constant ``key``: a literal, an :class:`EnvLookup`, an
@@ -380,13 +473,13 @@ class WpConfigString:
         return MISSING
 
     def _set(self, kind: Kind, key: str, value: ConfigValue) -> bool:
-        if not (isinstance(key, str) and _IDENTIFIER_RE.fullmatch(key)):
-            raise ConfigKeyError(
-                key=repr(key), reason="not a PHP identifier ([A-Za-z_][A-Za-z0-9_]*)"
-            )
+        _check_key(key)
         # Render first, so an unrenderable value fails the same way on both paths.
         rendered = render_value(key, value)
+        return self._put(kind, key, rendered, render_statement(kind, key, value))
 
+    def _put(self, kind: Kind, key: str, rendered: str, statement: str) -> bool:
+        """Replace ``key``'s value span with ``rendered``, or insert ``statement``."""
         for constant in scan(self._content):
             if constant.kind != kind or constant.key != key:
                 continue
@@ -407,10 +500,14 @@ class WpConfigString:
                 key=key,
             )
 
-        statement = render_statement(kind, key, value)
         # After the FIRST opening tag only: a file carrying two `<?php` markers
         # must not receive two copies of the statement.
         at = opening.end()
         self._content = self._content[:at] + statement + opening.group(1) + self._content[at:]
         _log.debug("%r added.", key)
         return True
+
+
+def _check_key(key: object) -> None:
+    if not (isinstance(key, str) and _IDENTIFIER_RE.fullmatch(key)):
+        raise ConfigKeyError(key=repr(key), reason="not a PHP identifier ([A-Za-z_][A-Za-z0-9_]*)")
