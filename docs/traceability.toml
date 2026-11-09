@@ -372,6 +372,9 @@ enforced_by = [
     "tests/test_set_source.py::test_copying_get_source_between_configs_is_exact",
     "tests/test_php_oracle.py::test_restoring_every_value_from_its_source_is_exact",
     "tests/test_php_oracle.py::test_random_expressions_copied_by_set_source_mean_the_same_to_php",
+    "tests/test_declares_function.py::test_a_mention_that_is_not_a_declaration_is_not_found",
+    "tests/test_declares_function.py::test_limit_a_declaration_php_never_makes_is_still_found",
+    "tests/test_php_oracle.py::test_declares_function_agrees_with_php_outside_its_stated_limits",
 ]
 not_checkable = "The 'Revisit when' conditions are events in the world, not properties of this code. The ADR now records that condition (a) was met on 2026-10-12 and fixed within Option C, and that (b) is not met."
 
@@ -476,7 +479,7 @@ reason = "Restore planned from a probe; the executor runs every phase. Backup's.
 
 [[rule]]
 id = "ADR-0023"
-source_sha256 = "72a937f6f2edd8d209fef13c31608c7410dd64128675faf984af45e7bae8498b"
+source_sha256 = "dbf9296b554badf36998b6b2cef0a0859c8b9a28e843abb6949573c85be55479"
 binds = true
 enforced_by = [
     "tests/test_file_adapter.py::test_replace_content_writes_exactly_the_text_given",
@@ -486,8 +489,12 @@ enforced_by = [
     "tests/test_file_adapter.py::test_a_write_keeps_the_original_mode",
     "tests/test_file_adapter.py::test_ownership_that_cannot_be_kept_refuses_the_write",
     "tests/test_file_adapter.py::test_a_file_removed_after_reading_is_not_recreated",
+    "tests/test_set_source.py::test_copying_get_source_between_configs_is_exact",
+    "tests/test_set_source.py::test_structurally_unsafe_sources_are_refused",
+    "tests/test_php_oracle.py::test_docker_sources_carried_into_another_config_resolve_as_in_the_original",
+    "tests/test_declares_function.py::test_before_compares_with_the_live_define",
 ]
-note = "Binding since backup's 2026-11-07 amendment: backup writes no byte of a live wp-config.php itself and delegates the whole-file replace to WpConfigFile.replace_content (v0.1.4), relying on its mode and owner rule, read-back, duplicate-key refusal and unchanged-text False. The write-safety tests run against both set() and replace_content(). Which config a restore keeps, and its DB_* keep step, stay backup's."
+note = "Binding since backup's 2026-11-07 amendment: backup writes no byte of a live wp-config.php itself and delegates the whole-file replace to WpConfigFile.replace_content (v0.1.4), relying on its mode and owner rule, read-back, duplicate-key refusal and unchanged-text False. The write-safety tests run against both set() and replace_content(). Since its 2026-11-08 amendment it also carries the target's DB_* with get_source and set_source (v0.1.6), and its getenv_docker check's revisit condition is met by declares_function (v0.1.7). Which config a restore keeps stays backup's."
 [[rule]]
 id = "ADR-0024"
 source_sha256 = "1bd7b0c03c353cb3c2a85efdc993f1536093338076ea7aa870e034a0233af7f5"

@@ -144,7 +144,17 @@ archived.set_source("DB_HOST", target.get_source("DB_HOST"))
 statement, open a comment, leave PHP or unbalance a bracket, and any that would not
 read back as written. That check is **structural, not a PHP parse**: text that is
 balanced but is not a valid expression would be written. Pass source that came
-from a working config, which is what `get_source()` returns. PHP 8.4 grades all of this in the test suite: every literal
+from a working config, which is what `get_source()` returns.
+
+`declares_function(name, before=None)` says whether the config declares a function,
+such as the Docker image's `getenv_docker()`, which a carried `getenv_docker(...)`
+value needs. It finds `function name(` and `function &name(` in any case, outside
+strings and comments, and `before=KEY` also requires it to come before that key's
+live define. **It is lexical, not a parse.** It reports a declaration PHP never makes
+(in a dead branch, a class, or another function) as found. It does not follow
+`include`/`require`, and `before=` is text order, not PHP's hoisting of top-level
+functions. Against PHP's own `function_exists()` it agrees on every shape outside
+those limits. PHP 8.4 grades all of this in the test suite: every literal
 reading, and 200 random lookups across every environment state.
 
 ## Install

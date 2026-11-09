@@ -153,6 +153,13 @@ class WpConfigFile:
         _log.debug("%s replaced and verified.", self._path)
         return True
 
+    def declares_function(self, name: str, before: str | None = None) -> bool:
+        """
+        Whether the file declares the function ``name``, outside strings and comments.
+        Lexical, not a parse: see :meth:`WpConfigString.declares_function` for its limits.
+        """
+        return self._config.declares_function(name, before)
+
     def set_source(self, key: str, source: str) -> bool:
         """
         Set the constant ``key`` to the PHP source ``source``, verbatim, verified as

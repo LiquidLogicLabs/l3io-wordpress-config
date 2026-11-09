@@ -31,6 +31,13 @@ stop.
   tagged publish ships a **final** version, never a `.devN` build.
 - Do not widen the parser beyond `define()` and simple file-scope variable
   assignments, and do not add a runtime dependency for any reason.
+  **One recorded exception (Shawn, 2026-11-08): `declares_function()`**, a read-only,
+  lexical query for `function [&]name(` outside strings and comments, asked for by
+  backup to replace its own text check. It is documented as not a parse: it cannot tell
+  dead branches, class methods or nested functions, does not follow includes, and
+  `before=` is text order, not hoisting. Tests pin those limits. Any further request
+  that needs PHP semantics (conditions, includes, scope) is a new exception for Shawn
+  to decide, not an extension of this one.
 - **`main` describes this package only.** Earlier history — the upstream code, the
   retired tags and name, past session logs — lives on the `legacy/*` branches and is
   not maintained; do not reintroduce it here. Two things stay because they must:
@@ -61,7 +68,7 @@ stop.
 
 ## Running and verifying
 
-- `uv sync --locked` then `uv run pytest`. Expect **464 passing at ~96.9% coverage** (463 and 1 skipped without the sibling repo).
+- `uv sync --locked` then `uv run pytest`. Expect **497 passing at ~97% coverage** (496 and 1 skipped without the sibling repo).
   `[tool.coverage.report] fail_under` applies to **every** run that measures coverage, so a
   subset run (`pytest tests/test_x.py`) fails on coverage alone — pass `--no-cov`, as the
   `contracts` job does. Raise the floor when coverage rises; never lower it to make a run pass.

@@ -432,3 +432,43 @@ def test_random_expressions_copied_by_set_source_mean_the_same_to_php(php_read):
         if seen["original"]["constants"].get(f"E{i}") != seen["copy"]["constants"].get(f"E{i}")
     ]
     assert problems == [], f"{len(problems)} disagreements, first: {problems[:3]}"
+
+
+# ---- declares_function(), graded by PHP's function_exists() ---------------------
+
+_FN = "($e, $d) { return getenv($e) ?: $d; }"
+_DECLARATIONS = [
+    f"function getenv_docker{_FN}",
+    f"function &getenv_docker{_FN}",
+    f"FUNCTION GetEnv_Docker {_FN}",
+    f"if (!function_exists('getenv_docker')) {{ function getenv_docker{_FN} }}",
+]
+_WRAPPERS: list[Callable[[str], str]] = [
+    lambda d: f"{d}\n",
+    lambda d: f"/* lead */ {d}\n",
+    lambda d: f"// {d}\n",
+    lambda d: f"# {d}\n",
+    lambda d: f"/*\n{d}\n*/\n",
+    lambda d: f"$doc = {render_value('K', d)};\n",
+    lambda d: f'$doc = "{d.replace("$", chr(92) + "$")}";\n',
+]
+
+
+def test_declares_function_agrees_with_php_outside_its_stated_limits(php_read):
+    """Every declaration shape in every wrapper: the lexical answer is PHP's."""
+    cases: dict[str, bytes] = {}
+    ours: dict[str, bool] = {}
+    for i, declaration in enumerate(_DECLARATIONS):
+        for j, wrap in enumerate(_WRAPPERS):
+            content = "<?php\n" + wrap(declaration) + "define('K', 1);\n"
+            case = f"d{i}w{j}"
+            cases[case] = content.encode()
+            ours[case] = WpConfigString(content).declares_function("getenv_docker")
+    seen = php_read(cases)
+    problems = [
+        f"{case}: ours {ours[case]}, PHP {'getenv_docker' in seen[case]['functions']}"
+        for case in cases
+        if ours[case] != ("getenv_docker" in seen[case]["functions"])
+    ]
+    assert problems == []
+    assert any(ours.values()) and not all(ours.values()), "both answers are exercised"

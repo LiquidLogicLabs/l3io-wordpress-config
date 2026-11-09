@@ -46,6 +46,7 @@ restore_error_handler();
 echo json_encode([
     'constants' => (object) (get_defined_constants(true)['user'] ?? []),
     'table_prefix' => $table_prefix ?? null,
+    'functions' => get_defined_functions()['user'],
     'output' => $__l3io_output,
     'warnings' => $__l3io_warnings,
 ], JSON_PRESERVE_ZERO_FRACTION | JSON_INVALID_UTF8_SUBSTITUTE);

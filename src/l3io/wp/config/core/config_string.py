@@ -125,6 +125,18 @@ class Constant:
     """The whole matched ``define(...);`` as it appears in the source."""
 
 
+def _code_only(content: str) -> str:
+    """``content`` with every string and comment blanked to spaces, offsets kept."""
+    return _NON_CODE_RE.sub(lambda m: re.sub(r"[^\n]", " ", m.group()), content)
+
+
+def _declaration_re(name: str) -> re.Pattern[str]:
+    # `function`, an optional `&` (return by reference), the name, `(`. PHP keywords
+    # and function names are case-insensitive. Not preceded by a word character, `$`,
+    # `>` or `:`, so `$function`, `->function` and `::function` are not keywords.
+    return re.compile(rf"(?<![\w$>:])function\s*&?\s*{re.escape(name)}\s*\(", re.IGNORECASE)
+
+
 def _block_comments(content: str) -> tuple[list[int], list[int]]:
     """Start and end offsets of every ``/* ... */`` comment, in source order."""
     starts: list[int] = []
@@ -427,6 +439,36 @@ class WpConfigString:
     def set_variable_source(self, key: str, source: str) -> bool:
         """Set the file-scope variable ``key`` to ``source``, as :meth:`set_source` does."""
         return self._put_checked("variable", key, source)
+
+    def declares_function(self, name: str, before: str | None = None) -> bool:
+        """
+        Whether the content declares the function ``name``, outside strings and comments.
+
+        Lexical, not a PHP parse (the one exception to the define()-and-variables
+        scope, recorded in AGENTS.md). It finds ``function name(`` and
+        ``function &name(`` in any case. It cannot tell a declaration PHP never makes
+        (a dead branch, a class method, one nested in another function), does not
+        follow ``include``/``require``, and does not recognise heredoc strings.
+
+        Args:
+            name: The function name, a PHP identifier.
+            before: A ``define()`` key. If given, the declaration must also come before
+                that key's live define in the text; ``False`` if the key is absent.
+                That is text order, not PHP's hoisting of top-level functions.
+
+        Raises:
+            ConfigKeyError: ``name`` is not a PHP identifier.
+        """
+        _check_key(name)
+        found = _declaration_re(name).search(_code_only(self._content))
+        if found is None:
+            return False
+        if before is None:
+            return True
+        for constant in scan(self._content):
+            if constant.kind == "define" and constant.key == before:
+                return found.start() < constant.start
+        return False
 
     def _put_checked(self, kind: Kind, key: str, source: str) -> bool:
         _check_key(key)
