@@ -17,14 +17,15 @@ state tree is empty by design.
 
 ## Current state (2026-11-08)
 
-- Last release: **`v0.1.6`** (2026-11-08), `set_source()` (below). Before it,
+- Last release: **`v0.1.7`** (2026-11-08), `declares_function()` (below). Before it,
+  **`v0.1.6`** (2026-11-08), `set_source()`; before that,
   **`v0.1.5`** (2026-11-08), `get_value()`; before that,
   **`v0.1.4`** (2026-11-07), `replace_content()`; before that,
   **`v0.1.3`** (2026-11-02), the first on TestPyPI; before that,
   **`v0.1.2`** (2026-10-29), the scanner fixes; before that, **`v0.1.1`**
   (2026-10-20), the write-permission fix; and before that,
   **`v0.1.0`** (2026-10-12, Shawn), on GitHub Releases and the internal Gitea
-  registry, with floating `v0` and `v0.1` now pointing at `v0.1.6`. Nothing is on PyPI; `v0.1.3` to `v0.1.6` are on TestPyPI. Verified by
+  registry, with floating `v0` and `v0.1` now pointing at `v0.1.7`. Nothing is on PyPI; `v0.1.3` to `v0.1.7` are on TestPyPI. Verified by
   installing from both the release wheel and the Gitea index. Its notes first published
   as "no changes": the builder took the floating `v0.1` as the previous tag. That is
   fixed in `14512f0`, and the release body was rebuilt from `v0.0.2..v0.1.0` using
@@ -78,6 +79,22 @@ file left), and by `make ci` under act: 11 of 11.
   2026-10-20. Separately, this session's shell had no `INFISICAL_API_URL`, so the CLI
   went to `app.infisical.com` and got 403; `INFISICAL_API_URL=https://secops.ravenwolf.org/api`
   fixed it. That is the host's environment, not this repo's.
+
+## 2026-11-08: v0.1.7, `declares_function()`, the parser rule's one exception
+
+Backup's check for `getenv_docker()` was a text heuristic. Shawn approved a lexical
+query as a recorded exception to "do not widen the parser" (AGENTS.md). Built in
+`8106001`: it blanks strings and comments with the scanner's lexer, then looks for
+`function [&]name(`; `before=` compares text order. Tests pin its limits: dead branches,
+class methods and nested functions are still found; includes are not followed;
+`before=` is not hoisting; heredoc is not recognised. PHP's `function_exists()` agrees on
+28 shapes outside those limits, and the dump now reports user functions. 497 tests,
+96.96%, floor 96.9. Released under the rule: preflight, then CI 11/11 and the audit
+green, then `make release`; release 42548174481, mirror publish 42548194827, TestPyPI
+42548274999. Verified from the TestPyPI install. Backup was told via Happier.
+
+- Any further request needing PHP semantics (conditions, includes, scope) is a **new**
+  exception for Shawn, not an extension of this one.
 
 ## 2026-11-08: v0.1.6, `set_source()`; the release rule, enforced
 
