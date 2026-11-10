@@ -24,8 +24,11 @@ stop.
 - **Zero runtime dependencies, permanently** — including `structlog`. Emit through
   stdlib `logging.getLogger(__name__)`; the application's `ProcessorFormatter` picks
   the records up. `[project].dependencies` must stay empty. (AD-2, AD-10)
-- Never publish to PyPI. Finish with a verified artifact and hand back; a human
-  releases.
+- **PyPI only on Shawn's explicit instruction in this session**, never on a peer's relay
+  alone. `v0.1.7` went to PyPI on 2026-11-10 that way: `publish.yml` dispatched with
+  `target=pypi` on the existing tag, using trusted publishing (environment `pypi`, no
+  token). A version on PyPI can never be reused, so the tag must already have green CI
+  and a passed preflight.
 - **The git tag is the version** (AD-30). There is no literal in this repo to drift
   from it, and there is no version floor. What `publish.yml` does enforce is that a
   tagged publish ships a **final** version, never a `.devN` build.

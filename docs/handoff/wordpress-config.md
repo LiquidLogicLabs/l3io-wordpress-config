@@ -15,7 +15,7 @@ current state only.
 family, and the gate on the other two. Work arrives as handoffs, not l3io-pm epics, so the
 state tree is empty by design.
 
-## Current state (2026-11-08)
+## Current state (2026-11-10)
 
 - Last release: **`v0.1.7`** (2026-11-08), `declares_function()` (below). Before it,
   **`v0.1.6`** (2026-11-08), `set_source()`; before that,
@@ -25,7 +25,7 @@ state tree is empty by design.
   **`v0.1.2`** (2026-10-29), the scanner fixes; before that, **`v0.1.1`**
   (2026-10-20), the write-permission fix; and before that,
   **`v0.1.0`** (2026-10-12, Shawn), on GitHub Releases and the internal Gitea
-  registry, with floating `v0` and `v0.1` now pointing at `v0.1.7`. Nothing is on PyPI; `v0.1.3` to `v0.1.7` are on TestPyPI. Verified by
+  registry, with floating `v0` and `v0.1` now pointing at `v0.1.7`. `v0.1.7` is on PyPI (2026-11-10); `v0.1.3` to `v0.1.7` are on TestPyPI. Verified by
   installing from both the release wheel and the Gitea index. Its notes first published
   as "no changes": the builder took the floating `v0.1` as the previous tag. That is
   fixed in `14512f0`, and the release body was rebuilt from `v0.0.2..v0.1.0` using
@@ -79,6 +79,17 @@ file left), and by `make ci` under act: 11 of 11.
   2026-10-20. Separately, this session's shell had no `INFISICAL_API_URL`, so the CLI
   went to `app.infisical.com` and got 403; `INFISICAL_API_URL=https://secops.ravenwolf.org/api`
   fixed it. That is the host's environment, not this repo's.
+
+## 2026-11-10: v0.1.7 on PyPI (Shawn, for backup's 1.0.0)
+
+Shawn registered the PyPI trusted publisher, and backup created the `pypi` environment.
+With Shawn's explicit confirmation in this session, `publish.yml` was dispatched with
+`target=pypi` on the existing `v0.1.7` (`8106001`: CI, audit and preflight green). Run
+42875014862: every job succeeded, including four clean installs and the PyPI upload.
+https://pypi.org/project/l3io-wordpress-config/0.1.7/. The RELEASING gate against real
+PyPI (`uv run --isolated --no-project --with l3io-wordpress-config==0.1.7 ...`, no index
+override) prints `ok`. Next in the family order: database publishes age-passphrase,
+then database, and backup goes last as 1.0.0.
 
 ## 2026-11-08: v0.1.7, `declares_function()`, the parser rule's one exception
 
@@ -244,7 +255,7 @@ and act with home-lab Infisical. Both have released to GitHub through the workfl
    filter narrowed to `v*.*.*` and both guarded in its
    `tests/contracts/test_workflow_invariants.py`. Database adopted floating tags on 2026-10-27 (D2 below); it pins
    config's `v0.1.0` tag in its dev lock, harmless because it never writes the file.
-3. [blocked] **Publish to PyPI**, and **make the `liquidlogiclabs` Gitea org public**.
+3. [done for config, 2026-11-10] **Publish to PyPI**, and **make the `liquidlogiclabs` Gitea org public**.
    AD-15: nothing reaches PyPI until all three packages can.
 4. [done] **Fixes to backup's documents**: all five landed in backup by 2026-10-20
    (AD-30 defined, AD-24 excludes config, ADR-0007, -0010 and -0012 corrected).
