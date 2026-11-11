@@ -159,7 +159,7 @@ reason = "Restore phase order belongs to backup. Re-judged 2026-10-20: the DB_NA
 
 [[rule]]
 id = "AD-18"
-source_sha256 = "0e1097dcf4638c00b825902a88181fb5a56bb75f99d16b753a2cfe68d32e3528"
+source_sha256 = "ee3875720e539e06f534c8804a4dd5bffe4cd115fffd32fd262671bc667db6ea"
 binds = true
 enforced_by = [
     "tests/test_file_adapter.py::test_a_failed_read_back_leaves_the_original_untouched",
@@ -177,7 +177,7 @@ enforced_by = [
     "tests/test_set_source.py::test_the_file_adapter_writes_and_verifies_the_source",
     "tests/test_set_source.py::test_the_file_adapter_refuses_before_touching_the_file",
 ]
-note = "Requirements 2 and 4: the atomic config write, which backup delegates to this package, and that it keeps the file's mode. Journal and staging cutover are backup's. Ownership is kept when permitted and the write is refused when not; a non-root writer of a file owned by another user is refused rather than taking it over."
+note = "Requirements 2 and 4: the atomic config write, which backup delegates to this package, and that it keeps the file's mode. Journal and cutover are backup's; since 2026-11-09 (ADR-0027) there is no staging database and the cutover writes only a relocation's DB_* keys, still through this package's atomic write. Ownership is kept when permitted and the write is refused when not; a non-root writer of a file owned by another user is refused rather than taking it over."
 
 [[rule]]
 id = "AD-19"
@@ -223,7 +223,7 @@ reason = "Flag-to-Restore-Mode mapping belongs to backup."
 
 [[rule]]
 id = "AD-26"
-source_sha256 = "26c8cce888490491377d45b88dd6c3178a4436099dd47259d0ac73062cdb1323"
+source_sha256 = "653f4b818848399663c5f4e7c15e4444f314d62eeb8cf1648bd128717913ff59"
 binds = false
 reason = "Passphrase resolution belongs to backup. Re-judged 2026-10-20: the handoff to l3io-wp-database's passphrase= and the decided default are backup's and database's."
 
@@ -249,7 +249,7 @@ reason = "GRANT escaping belongs to database."
 
 [[rule]]
 id = "AD-29"
-source_sha256 = "b2870579f1832940fad9b0f62b79ddaf42fd02a9052720bf7f18171177e990f6"
+source_sha256 = "e39bb710ea226faa6d56ea9d24bfedff243d5ec1c573028b09d03b6858ad74b2"
 binds = false
 reason = "Provisioning existence checks belong to database and backup."
 
@@ -425,19 +425,19 @@ note = "Every clause has an enforcer here: no literal, hatch-vcs source, no loca
 
 [[rule]]
 id = "ADR-0014"
-source_sha256 = "2ef83ec94d0c1f2128ac615937ea9f0e517cf6dc6427e06f51230440683f03b1"
+source_sha256 = "ff4672035cda2e16a5b63744e5700febce8997d928ed6e456ca995ae93149638"
 binds = false
 reason = "Archive encryption, by age through l3io-wp-database. Backup's and database's; this package touches no archive and no key. Re-judged 2026-10-27 after the passphrase amendment (binder package l3io-age-passphrase, age CLI fallback): still not this package's."
 
 [[rule]]
 id = "ADR-0015"
-source_sha256 = "c2cfef2d1da7f09bd48f56a1398e49ec1cf886b86afd78a5ac6387dfb70913ea"
+source_sha256 = "b7baafa82b13f7368fec2aade47cbe1cabeeefdf1e7a4021ec3faaba28b65abe"
 binds = false
 reason = "Credential transport to MySQL client tools, delegated to l3io-wp-database. This package invokes no client tool and holds no credential beyond the text it reads; see AD-7's row."
 
 [[rule]]
 id = "ADR-0016"
-source_sha256 = "e74d4b8e9ee3d5fc1c81be0b7ce4d2f69095e88d71696cefa3f29bb4fb9e1741"
+source_sha256 = "d1c519d8704f4d14122dffef2198be2f07b2ec02ccafd8ab93ff0da403f6df4b"
 binds = false
 reason = "The Run Context binds adapters once, after the Site Lock and the wp-config.php read. Backup's composition root; nothing here."
 
@@ -449,7 +449,7 @@ reason = "Archive Manifest v1 member index. Backup's archive format."
 
 [[rule]]
 id = "ADR-0018"
-source_sha256 = "38e403e32c5b2dbaaae046ada478b461bf1fcd124aeb584e0984e488856eccc9"
+source_sha256 = "055bfa36f170dad4842532d8448ab3eaced323d25b62d836c624fa5cc3859b39"
 binds = false
 reason = "Redaction at backup's CLI and logging boundary. This package's own errors carry no credential (AD-14's row); applying redaction is backup's."
 
@@ -461,25 +461,25 @@ reason = "Scope of backup's Dry Run. Backup's."
 
 [[rule]]
 id = "ADR-0020"
-source_sha256 = "f4e016b741334fe90f0239c5222e3c0d3e2f3ae735448042ef4df052fda3cd60"
+source_sha256 = "e578a680e5d25918e85228f8097a85a1fb2adc64e599805d36c3b8cc542ff53e"
 binds = false
 reason = "Restore undo derived from the Run Journal. Backup's."
 
 [[rule]]
 id = "ADR-0021"
-source_sha256 = "e547a52483bc93ff6c173e757a7e059b73c5cdab818866ff51060fbd52c816e8"
+source_sha256 = "96de6cf0792fc7fa8c2ede3c52a106dfdba6e7afbce7d45177995f9d13b53fc0"
 binds = false
 reason = "Run Journal location and lifecycle. Backup's."
 
 [[rule]]
 id = "ADR-0022"
-source_sha256 = "2624514dd792c03468a2d63ba73d6fa525a03ca4b965428342edf74113875d21"
+source_sha256 = "da957dbc53188676cab7182e5dea383486fb8597314aff82c2524ae1500ffd2c"
 binds = false
 reason = "Restore planned from a probe; the executor runs every phase. Backup's."
 
 [[rule]]
 id = "ADR-0023"
-source_sha256 = "dbf9296b554badf36998b6b2cef0a0859c8b9a28e843abb6949573c85be55479"
+source_sha256 = "34ffbaa7a59d680c447aa4003962b5618a2d3714699bf8227ae2bde86ed4dc53"
 binds = true
 enforced_by = [
     "tests/test_file_adapter.py::test_replace_content_writes_exactly_the_text_given",
@@ -497,7 +497,7 @@ enforced_by = [
 note = "Binding since backup's 2026-11-07 amendment: backup writes no byte of a live wp-config.php itself and delegates the whole-file replace to WpConfigFile.replace_content (v0.1.4), relying on its mode and owner rule, read-back, duplicate-key refusal and unchanged-text False. The write-safety tests run against both set() and replace_content(). Since its 2026-11-08 amendment it also carries the target's DB_* with get_source and set_source (v0.1.6), and its getenv_docker check's revisit condition is met by declares_function (v0.1.7). Which config a restore keeps stays backup's."
 [[rule]]
 id = "ADR-0024"
-source_sha256 = "1bd7b0c03c353cb3c2a85efdc993f1536093338076ea7aa870e034a0233af7f5"
+source_sha256 = "00c86971598cf7d50f5a73c3182e136dbdd545a9a3a67b32dae37659e1b79c1d"
 binds = false
 reason = "One age-encrypted payload per Archive, passphrase only for v1. Backup's archive format and encryption; this package touches no archive and no key."
 
@@ -509,6 +509,12 @@ reason = "Backup's api/ composes through its cli/ drivers, so library and CLI ru
 
 [[rule]]
 id = "ADR-0027"
-source_sha256 = "6fa5bf95f9e50be9d2e7732a342ae801d1ec0b97c747964cdfcfd9ede3c8a624"
+source_sha256 = "868f8a6e3c5f51ded92f5930e88b8228097adc2b8136dce78d120450384435be"
 binds = false
 reason = "Restoring a site whose DB_NAME is an environment lookup by swapping tables into the live name. Backup's sequence and database's SQL. It relies on this package only to read the lookup (get_value, v0.1.5) and, for --overwrite-wp-config, to write source text (set_source, v0.1.6); those are AD-18's and ADR-0010's rows."
+
+[[rule]]
+id = "ADR-0028"
+source_sha256 = "be1874957342bab1f637dda6f0c48e5e9ff06085bcd602799a9aa2d7b09d2228"
+binds = false
+reason = "Backup's layered configuration (flag, variable, TOML) through pydantic-settings. Backup's; this package keeps zero runtime dependencies (AD-2)."

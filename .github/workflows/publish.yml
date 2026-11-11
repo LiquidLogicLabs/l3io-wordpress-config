@@ -450,6 +450,55 @@ jobs:
           # instead, so a release is never published bodyless.
           generate-release-notes: ${{ steps.notes.outputs.changelog == '' }}
 
+      # skip-if-release-exists makes a second dispatch safe to create, but says
+      # nothing about what is attached. Each dist file's sha256 must equal the
+      # release's asset of that name (GitHub's recorded digest, or the downloaded
+      # file). A missing name is uploaded, never with --clobber; a mismatch fails
+      # rather than replace a published file. Same step as backup, database and
+      # age-passphrase; tests/test_workflow_gates.py runs it against a stub gh.
+      - name: the release's assets are this build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          listing=$(gh release view "$TAG" --json assets --jq '.assets[] | [.name, (.digest // "")] | @tsv')
+          scratch=$(mktemp -d)
+          shopt -s nullglob
+          files=(dist/*)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::error::dist/ is empty; there is nothing to check the release against"
+            exit 1
+          fi
+          missing=(); bad=0
+          for f in "${files[@]}"; do
+            name=$(basename "$f")
+            want="sha256:$(sha256sum "$f" | cut -d' ' -f1)"
+            row=$(awk -F'\t' -v n="$name" '$1 == n' <<<"$listing")
+            if [ -z "$row" ]; then
+              echo "missing on the release: $name"
+              missing+=("$f")
+              continue
+            fi
+            have=$(cut -f2 <<<"$row")
+            if [ -z "$have" ]; then
+              gh release download "$TAG" --pattern "$name" --dir "$scratch"
+              have="sha256:$(sha256sum "$scratch/$name" | cut -d' ' -f1)"
+            fi
+            if [ "$have" = "$want" ]; then
+              echo "matches: $name $want"
+            else
+              echo "::error::release $TAG already has $name with $have, but this build's is $want; refusing to replace it"
+              bad=1
+            fi
+          done
+          [ "$bad" -eq 0 ] || exit 1
+          if [ "${#missing[@]}" -gt 0 ]; then
+            gh release upload "$TAG" "${missing[@]}"
+            echo "uploaded ${#missing[@]} missing asset(s)"
+          fi
+
   publish-mirror:
     # Optional internal Gitea package registry. Token auth, because a Gitea
     # registry does not do trusted publishing. Skipped entirely when the vars
